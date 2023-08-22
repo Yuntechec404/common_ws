@@ -1,20 +1,5 @@
 # Common Project Installation
-```
-sudo apt-get install ros-noetic-move-base ros-noetic-global-planner ros-noetic-teb-local-planner ros-noetic-map-server ros-noetic-hector-trajectory-server
 
-mkdir -p ~/common_ws/src 
+如果導航時出現問題，有可能是以下依賴尚未安裝
+> $ sudo apt-get install ros-noetic-move-base ros-noetic-global-planner ros-noetic-teb-local-planner ros-noetic-map-server ros-noetic-hector-trajectory-server
 
-cd ~/common_ws/src
-
-git clone https://github.com/GPMxYunTech/common_ws.git
-
-cd ..
-
-rosdep install --from-paths src --ignore-src -r -y
-
-catkin_make
-
-echo "source ~/common_ws/devel/setup.bash" >> ~/.bashrc
-
-source ~/.bashrc
-```
