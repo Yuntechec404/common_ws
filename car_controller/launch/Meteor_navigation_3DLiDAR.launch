@@ -1,3 +1,0 @@
-<launch>
-  <include file="$(find car_controller)/launch/include/odom/Meteor_move_base_3DLiDAR.launch"/>
-</launch>
