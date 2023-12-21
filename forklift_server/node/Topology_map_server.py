@@ -9,6 +9,7 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist, Pose
 from visualization_msgs.msg import Marker
 import tf2_ros
+from geometry_msgs.msg import PoseWithCovarianceStamped
 import heapq
 import math
 
@@ -74,6 +75,18 @@ class TopologyMap():
         path.reverse()  
         return path
 
+class SubscriberPose():        # 監聽車子在地圖中的位置
+    def __init__(self):
+        rospy.Subscriber("/rtabmap/localization_pose", PoseWithCovarianceStamped, self.Current_pose, queue_size = 1)
+
+    def Current_pose(self, msg):
+        self.robot_pose_x = msg.pose.pose.position.x
+        self.robot_pose_y = msg.pose.pose.position.y
+
+    def spin_once(self):
+        return self.robot_pose_x, self.robot_pose_y
+
+
 class Navigation():
     def __init__(self):
         odom = rospy.get_param(rospy.get_name() + "/odom", "/odom")
@@ -83,7 +96,7 @@ class Navigation():
         self.cmd_pub = rospy.Publisher('/cmd_vel', Twist, queue_size = 1)
         self.init_param()
 
-    def move(self, x, y, z, w):
+    def move(self, mode, x, y, z, w):
         goal = MoveBaseGoal()
         goal.target_pose.header.frame_id = "map"
         goal.target_pose.header.stamp = rospy.Time.now()
@@ -94,14 +107,25 @@ class Navigation():
 
         self.client.send_goal(goal)
         print("Navigation to", goal)
-        wait = self.client.wait_for_result()
+        if 'pass' in mode :
+            while(1):
+                current_position_x, current_position_y = sub_pose.spin_once()
+                distance_target = math.sqrt(((x - current_position_x) ** 2) + ((y - current_position_y) ** 2))      # 計算從目前位置到目標點的直線距離
+                # rospy.loginfo("distance_target = %s" % (distance_target))
+                if distance_target < 1.2 :
+                    break
+                
+            return self.client.get_result()
+        
+        else :
+            wait = self.client.wait_for_result()
 
         if not wait:
             rospy.logerr("Action server not available!")
             rospy.signal_shutdown("Action server not available!")
         else:
             return self.client.get_result()
-
+    
     def init_param(self):    
         self.trigger = True
         self.pre_odom = 0.0
@@ -215,8 +239,7 @@ class TopologyMapAction():
                     rospy.loginfo('Navigation to %s' % path[i])
                     self._feedback.feedback = str('Navigation to %s' % path[i])
                     self._as.publish_feedback(self._feedback)
-                    self.Navigation.move(
-                        waypoints[path[i]][0], waypoints[path[i]][1], waypoints[path[i]][2], waypoints[path[i]][3])
+                    self.Navigation.move(path[i], waypoints[path[i]][0], waypoints[path[i]][1], waypoints[path[i]][2], waypoints[path[i]][3])
                 
 
         elif msg.target_pose != None:
@@ -300,6 +323,7 @@ class MarkerViewer():
 if __name__ == '__main__':
     rospy.init_node('TopologyMap_server')
     server = TopologyMapAction(rospy.get_name())
+    sub_pose = SubscriberPose()
     
     MarkerViewer = MarkerViewer()
     for i in waypoints:
