@@ -21,12 +21,12 @@ class TestAction(Node):
         self.shelf_sub = self.create_subscription(PoseArray, "/apriltag_poses", self.shelf_callback, qos_profile=qos_profile_sensor_data)
         self.forkpose_sub = self.create_subscription(Meteorcar, "forklift_pose", self.cbGetforkpos, qos_profile=qos_profile_sensor_data)
         rate = self.create_rate(1)
-        # self.get_logger().info("action_test")
-        # for i in range(10):
-        #     # rate.sleep()
-        #     self.get_logger().info("do something")
-        #     rclpy.spin_once(self)
-        #     self.get_logger().info("Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
+        while rclpy.ok():
+            # rate.sleep()
+            self.get_logger().info("do something")
+            rclpy.spin_once(self)
+            self.get_logger().info("Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
+            self.get_logger().info("Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
     
     def init_parame(self):
         # Odometry_variable
