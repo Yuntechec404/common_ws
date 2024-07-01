@@ -1,8 +1,0 @@
-#goal definition
-bool goal
----
-#result definition
-string result
----
-#feedback
-string feedback

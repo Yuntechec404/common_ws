@@ -1,4 +1,0 @@
-float32 wheel_velocity
-float32 wheel_angle
-float32 fork_position
-float32 fork_velocity
