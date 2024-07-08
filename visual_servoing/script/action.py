@@ -2,31 +2,204 @@
 # -*- coding: utf-8 -*-
 from geometry_msgs.msg import Twist
 from forklift_driver.msg import Meteorcar
-import rclpy
-import rclpy.logging
-
-
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseArray, Pose
 from rclpy.qos import qos_profile_sensor_data
 import math
 import tf_transformations
+import rclpy
+import rclpy.logging
 from rclpy.node import Node
+from enum import Enum
 import time
+class Action():
+    def __init__(self, TestAction):
+        # cmd_vel
+        self.TestAction = TestAction
+        self.cmd_vel = cmd_vel(TestAction)
+        # NearbySequence
+        self.NearbySequence = Enum('NearbySequence', 'initial_turn go_straight turn_right parking ')
+        self.current_nearby_sequence = self.NearbySequence.initial_turn.value
+        # Odometry_param
+        self.is_odom_received = False
+        self.robot_2d_pose_x = 0.0
+        self.robot_2d_pose_y = 0.0
+        self.robot_2d_theta = 0.0
+        self.initial_robot_pose_x = 0.0
+        self.initial_robot_pose_y = 0.0
+        # AprilTag_param
+        self.is_marker_pose_received = False
+        self.marker_2d_pose_x = 0.0
+        self.marker_2d_pose_y = 0.0
+        self.marker_2d_theta = 0.0
+        self.initial_marker_pose_x = 0.0
+        self.initial_marker_pose_y = 0.0
+        self.initial_marker_pose_theta = 0.0
+        # Fork_param
+        self.forwardbackpostion = 0.0
+        self.updownposition = 0.0
+        self.fork_threshold = 0.005
+        # other
+        self.check_wait_time = 0
+        self.is_triggered = False
+
+    def SpinOnce(self):
+        (self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta, \
+         self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta)=self.TestAction.SpinOnce()
+    def SpinOnce_fork(self):
+        self.updownposition = self.TestAction.SpinOnce_fork()
+
+    def fnseqdead_reckoning(self, dead_reckoning_dist):#(使用里程紀計算)移動到離現在位置dead_reckoning_dist公尺的地方
+        self.SpinOnce()
+        if self.is_triggered == False:
+            self.is_triggered = True
+            self.initial_robot_pose_x = self.robot_2d_pose_x
+            self.initial_robot_pose_y = self.robot_2d_pose_y
+        dist = math.copysign(1, dead_reckoning_dist) * self.fnCalcDistPoints(self.initial_robot_pose_x, self.robot_2d_pose_x, self.initial_robot_pose_y, self.robot_2d_pose_y)
+        if math.copysign(1, dead_reckoning_dist) > 0.0:
+            if  dead_reckoning_dist - dist < 0.0:
+                self.cmd_vel.fnStop()
+                self.is_triggered = False
+                return True
+            else:
+                self.cmd_vel.fnGoStraight(-(dead_reckoning_dist - dist))
+                return False
+        elif math.copysign(1, dead_reckoning_dist) < 0.0:
+            if  dead_reckoning_dist - dist > 0.0:
+                self.cmd_vel.fnStop()
+                self.is_triggered = False
+                return True
+            else:
+                self.cmd_vel.fnGoStraight(-(dead_reckoning_dist - dist))
+                return False
+
+    def fnseqmove_to_marker_dist(self, marker_dist): #(使用marker計算) 移動到距離marker_dist公尺的位置
+        self.SpinOnce()
+        if(marker_dist < 2.0):
+            threshold = 0.015
+        else:
+            threshold = 0.03
+
+        dist = math.sqrt(self.marker_2d_pose_x**2 + self.marker_2d_pose_y**2)
+        
+        if dist < (marker_dist-threshold):
+            self.cmd_vel.fnGoStraight(marker_dist - dist)
+            return False
+        elif dist > (marker_dist+threshold):
+            self.cmd_vel.fnGoStraight(marker_dist - dist)
+            return False
+        else:
+            self.cmd_vel.fnStop()
+            return True
+
+class cmd_vel():
+    def __init__(self, TestAction):
+        self.pub_cmd_vel = TestAction.cmd_vel_pub
+        self.pub_fork = TestAction.fork_pub
+
+    def cmd_pub(self, twist):
+
+        if twist.angular.z > 0.2:
+            twist.angular.z =0.2
+        elif twist.angular.z < -0.2:
+            twist.angular.z =-0.2
+        if twist.linear.x > 0 and twist.linear.x < 0.02:
+            twist.linear.x =0.05
+        elif twist.linear.x < 0 and twist.linear.x > -0.02:
+            twist.linear.x =-0.05   
+
+        if twist.linear.x > 0.2:
+            twist.linear.x =0.2
+        elif twist.linear.x < -0.2:
+            twist.linear.x =-0.2                     
+        if twist.angular.z > 0 and twist.angular.z < 0.05:
+            twist.angular.z =0.05
+        elif twist.angular.z < 0 and twist.angular.z > -0.05:
+            twist.angular.z =-0.05
+        
+        self.pub_cmd_vel.publish(twist)
+
+    def fork_pub(self, direction):
+        fork = Meteorcar()
+        fork.fork_position = direction
+        self.pub_fork.publish(fork)
+
+    def fnStop(self):
+        twist = Twist()
+        self.cmd_pub(twist)
+
+    def fnTurn(self, theta):
+        Kp = 0.3 #1.0
+        angular_z = Kp * theta
+        twist = Twist()
+        twist.linear.x = 0
+        twist.linear.y = 0
+        twist.linear.z = 0
+        twist.angular.x = 0
+        twist.angular.y = 0
+        twist.angular.z = -angular_z
+        self.cmd_pub(twist)
+
+    def fnGoStraight(self,v):
+        Kp = 0.2
+        twist = Twist()
+        twist.linear.x = Kp*v
+        twist.linear.y = 0.
+        twist.linear.z = 0.
+        twist.angular.x = 0.
+        twist.angular.y = 0.
+        twist.angular.z = 0.
+        self.cmd_pub(twist)
+
+    def fnGoBack(self):
+        twist = Twist()
+        twist.linear.x = 0.1
+        twist.linear.y = 0
+        twist.linear.z = 0
+        twist.angular.x = 0
+        twist.angular.y = 0
+        twist.angular.z = 0
+        self.cmd_pub(twist)
+
+    def fnfork(self,direction):
+        fork = Meteorcar()
+        fork.fork_position = direction
+        self.fork_pub(fork)
+
+
+    def fnTrackMarker(self, theta):
+        Kp = 4.0 #6.5
+        twist = Twist()
+        twist.linear.x = 0.05
+        twist.linear.y = 0
+        twist.linear.z = 0
+        twist.angular.x = 0
+        twist.angular.y = 0
+        twist.angular.z = -Kp * theta
+        self.cmd_pub(twist)
+
 class TestAction(Node):
     def __init__(self):
         super().__init__('action_test')
         self.init_parame()
-        self.odom_sub = self.create_subscription(Odometry, "wheel_odom", self.odom_callback, qos_profile=qos_profile_sensor_data)
+        self.odom_sub = self.create_subscription(Odometry, "/wheel_odom", self.odom_callback, qos_profile=qos_profile_sensor_data)
         self.shelf_sub = self.create_subscription(PoseArray, "/apriltag_poses", self.shelf_callback, qos_profile=qos_profile_sensor_data)
-        self.forkpose_sub = self.create_subscription(Meteorcar, "forklift_pose", self.cbGetforkpos, qos_profile=qos_profile_sensor_data)
-        rate = self.create_rate(1)
+        self.forkpose_sub = self.create_subscription(Meteorcar, "/forklift_pose", self.cbGetforkpos, qos_profile=qos_profile_sensor_data)
+        self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", 1)
+        self.fork_pub = self.create_publisher(Meteorcar, "/forklift_cmd", 1)
+
+        self.action = Action(self)
+        # rate = self.create_rate(10)
         while rclpy.ok():
-            # rate.sleep()
-            self.get_logger().info("do something")
             rclpy.spin_once(self)
+            self.get_logger().info("Move to marker dist")
+            if self.action.fnseqmove_to_marker_dist(1.5):
+                self.get_logger().info("Move to marker dist done")
+                break
             self.get_logger().info("Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
             self.get_logger().info("Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
+            # rate.sleep()
+            time.sleep(0.1)
     
     def init_parame(self):
         # Odometry_variable
@@ -78,7 +251,6 @@ class TestAction(Node):
                 self.marker_2d_pose_x = -marker_msg.position.z
                 self.marker_2d_pose_y = marker_msg.position.x + self.offset_x
                 self.marker_2d_theta = -theta
-                self.get_logger().info("Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
             else:
                 pass
         except:
