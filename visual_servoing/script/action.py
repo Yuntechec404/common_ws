@@ -100,7 +100,7 @@ class Action():
             self.cmd_vel.fnStop()
             return True
         
-    def fnSeqChangingtheta(self, threshod): #旋轉到marker的theta值為0(叉車正對marker)), threshod為角度誤差值
+    def fnSeqChangingtheta(self, threshod): #旋轉到marker的theta值為0, threshod為角度誤差值
         self.SpinOnce()
         Kp = 0.1
         # self.marker_2d_theta= self.TrustworthyMarker2DTheta(1)
@@ -142,7 +142,7 @@ class Action():
         # print("mean", statistics.mean(clean_list))
         return statistics.median(clean_list) 
     
-    def fnSeqChangingDirection(self, threshod):
+    def fnSeqChangingDirection(self, threshod): #旋轉到marker的y值為0(叉車正對marker)), threshod為角度誤差值
         self.SpinOnce()
         Kp = 0.3
         desired_angle_turn = math.atan2(self.marker_2d_pose_y, self.marker_2d_pose_x)
@@ -166,6 +166,129 @@ class Action():
             self.check_wait_time =0
             return False
         
+    def fnSeqMovingNearbyParkingLot(self):
+        self.SpinOnce()
+        Kp = 0.2
+        if self.current_nearby_sequence == self.NearbySequence.initial_turn.value:
+            if self.is_triggered == False:
+                self.is_triggered = True
+                self.initial_robot_pose_theta = self.robot_2d_theta
+                self.initial_robot_pose_x = self.robot_2d_pose_x
+                self.initial_robot_pose_y = self.robot_2d_pose_y
+
+                self.initial_marker_pose_theta = self.TrustworthyMarker2DTheta(3)
+                self.initial_marker_pose_x = self.marker_2d_pose_x
+                # print("initial_marker_pose_theta ", self.initial_marker_pose_theta)
+                # decide doing fnSeqMovingNearbyParkingLot or not
+                desired_dist = -1* self.initial_marker_pose_x * abs(math.cos((math.pi / 2.) - self.initial_marker_pose_theta))
+                if abs(desired_dist) < 0.05:
+                    return True
+            
+            if self.initial_marker_pose_theta < 0.0:
+                desired_angle_turn = (math.pi / 2.0) + self.initial_marker_pose_theta - (self.robot_2d_theta - self.initial_robot_pose_theta)
+            elif self.initial_marker_pose_theta > 0.0:
+                desired_angle_turn = -(math.pi / 2.0) + self.initial_marker_pose_theta - (self.robot_2d_theta - self.initial_robot_pose_theta)
+            
+            desired_angle_turn = desired_angle_turn
+            self.cmd_vel.fnTurn(Kp, desired_angle_turn)
+
+            if abs(desired_angle_turn) < 0.03:
+                self.cmd_vel.fnStop()
+                if self.check_wait_time >10:
+                    self.check_wait_time = 0
+                    self.current_nearby_sequence = self.NearbySequence.go_straight.value
+                    self.is_triggered = False
+                else:
+                    self.check_wait_time =self.check_wait_time +1
+            elif abs(desired_angle_turn) < 0.045 and self.check_wait_time :
+                self.cmd_vel.fnStop()
+                if self.check_wait_time > 10:
+                    self.check_wait_time = 0
+                    self.current_nearby_sequence = self.NearbySequence.go_straight.value
+                    self.is_triggered = False
+                else:
+                    self.check_wait_time =self.check_wait_time +1
+            else:
+                self.check_wait_time =0    
+
+        elif self.current_nearby_sequence == self.NearbySequence.go_straight.value:
+            if self.is_triggered == False:
+                self.is_triggered = True
+                self.initial_robot_pose_x = self.robot_2d_pose_x
+                self.initial_robot_pose_y = self.robot_2d_pose_y
+
+            dist_from_start = fnCalcDistPoints(self.initial_robot_pose_x, self.robot_2d_pose_x, self.initial_robot_pose_y, self.robot_2d_pose_y)
+            desired_dist = self.initial_marker_pose_x * abs(math.cos((math.pi / 2.) - self.initial_marker_pose_theta))
+            
+            remained_dist = desired_dist + dist_from_start
+            self.cmd_vel.fnGoStraight(Kp, desired_dist)
+
+            if abs(remained_dist) < 0.02:
+                self.cmd_vel.fnStop()
+                self.current_nearby_sequence = self.NearbySequence.turn_right.value
+                self.is_triggered = False
+
+
+        elif self.current_nearby_sequence == self.NearbySequence.turn_right.value:
+            if self.is_triggered == False:
+                self.is_triggered = True
+                self.initial_robot_pose_theta = self.robot_2d_theta
+
+            if self.initial_marker_pose_theta < 0.0:
+                desired_angle_turn = (math.pi / 2.0) + (self.robot_2d_theta - self.initial_robot_pose_theta)
+            elif self.initial_marker_pose_theta > 0.0:
+                desired_angle_turn = -(math.pi / 2.0) + (self.robot_2d_theta - self.initial_robot_pose_theta)
+            print("desired_angle_turn", desired_angle_turn)
+            desired_angle_turn = -1. * desired_angle_turn
+            self.cmd_vel.fnTurn(Kp, desired_angle_turn)
+            if abs(desired_angle_turn) < 0.01:
+                self.cmd_vel.fnStop()
+                if self.check_wait_time > 20:
+                    self.check_wait_time = 0
+                    self.current_nearby_sequence = self.NearbySequence.initial_turn.value
+                    self.is_triggered = False
+                    return True                
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
+            elif abs(desired_angle_turn) < 0.02 and self.check_wait_time:
+                self.cmd_vel.fnStop()
+                if self.check_wait_time > 20:
+                    self.check_wait_time = 0
+                    self.current_nearby_sequence = self.NearbySequence.initial_turn.value
+                    self.is_triggered = False
+                    return True                
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
+            else:
+                self.check_wait_time =0    
+        return False
+    
+    def fnSeqParking(self, parking_dist):
+        self.SpinOnce()
+        desired_angle_turn = math.atan2(self.marker_2d_pose_y - 0, self.marker_2d_pose_x - 0)
+
+        if desired_angle_turn <0:
+            desired_angle_turn = desired_angle_turn + math.pi
+        else:
+            desired_angle_turn = desired_angle_turn - math.pi
+        self.cmd_vel.fnTrackMarker(desired_angle_turn)
+        if (abs(self.marker_2d_pose_x) < parking_dist)  :
+            self.cmd_vel.fnStop()
+            if self.check_wait_time > 10:
+                self.check_wait_time = 0
+                return True
+            else:
+                self.check_wait_time =self.check_wait_time  +1
+        elif (abs(self.marker_2d_pose_x) < parking_dist) and self.check_wait_time:
+            self.cmd_vel.fnStop()
+            if self.check_wait_time > 10:
+                self.check_wait_time = 0
+                return True
+            else:
+                self.check_wait_time =self.check_wait_time  +1
+        else:
+            self.check_wait_time =0
+            return False
 class cmd_vel():
     def __init__(self, TestAction):
         self.pub_cmd_vel = TestAction.cmd_vel_pub
@@ -201,14 +324,14 @@ class cmd_vel():
         twist = Twist()
         self.cmd_pub(twist)
 
-    def fnTurn(self, Kp, theta):
+    def fnTurn(self, Kp=0.2, theta=0.):
         twist = Twist()
         twist.angular.z = Kp * theta
         self.cmd_pub(twist)
 
-    def fnGoStraight(self, Kp, v):
+    def fnGoStraight(self, Kp=0.2, v=0.):
         twist = Twist()
-        twist.linear.x = Kp*v
+        twist.linear.x = Kp * v
         self.cmd_pub(twist)
 
     def fnGoBack(self):
@@ -228,14 +351,10 @@ class cmd_vel():
 
 
     def fnTrackMarker(self, theta):
-        Kp = 4.0 #6.5
+        Kp = 2.0 #6.5
         twist = Twist()
-        twist.linear.x = 0.05
-        twist.linear.y = 0
-        twist.linear.z = 0
-        twist.angular.x = 0
-        twist.angular.y = 0
-        twist.angular.z = -Kp * theta
+        twist.linear.x = -0.05
+        twist.angular.z = Kp * theta
         self.cmd_pub(twist)
 
 class TestAction(Node):
@@ -256,15 +375,20 @@ class TestAction(Node):
 
         while rclpy.ok():
             rclpy.spin_once(self)
-            self.get_logger().info("visual_servoing")
+            self.get_logger().info("visual_servoing fnSeqChangingDirection")
             self.get_logger().info("Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
             self.get_logger().info("Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
-            if self.action.fnSeqChangingDirection(0.02):
+            if self.action.fnSeqParking(0.5):
                 self.get_logger().info("Move to marker dist done")
                 break
-            # rate.sleep()
             time.sleep(0.1)
-        # rclpy.shutdown()
+
+        while rclpy.ok():
+            rclpy.spin_once(self)
+            self.get_logger().info("visual_servoing fnSeqChangingDirection")
+            self.get_logger().info("Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
+            self.get_logger().info("Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
+            time.sleep(0.1)
     
     def init_parame(self):
         # Odometry_variable
