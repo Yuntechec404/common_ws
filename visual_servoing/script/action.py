@@ -6,13 +6,14 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseArray, Pose
 from rclpy.qos import qos_profile_sensor_data
 import math
+import rclpy.time
 import tf_transformations
 import rclpy
 import rclpy.logging
 from rclpy.node import Node
 from enum import Enum
 import time
-
+import statistics
 def fnCalcDistPoints(x1, x2, y1, y2):
     return math.sqrt((x1 - x2) ** 2. + (y1 - y2) ** 2.)
 
@@ -96,7 +97,42 @@ class Action():
         else:
             self.cmd_vel.fnStop()
             return True
-
+        
+    def fnSeqChangingtheta(self, threshod):
+        self.SpinOnce()
+        self.marker_2d_theta= self.TrustworthyMarker2DTheta(1)
+        desired_angle_turn = -self.marker_2d_theta
+        if abs(desired_angle_turn) < threshod  :
+            self.cmd_vel.fnStop()
+            time.sleep(0.1)
+            return True
+        else:
+            self.TurnByTime(desired_angle_turn*2, 1)
+            return False
+        
+    def TrustworthyMarker2DTheta(self, duration): #用於計算marker的theta值再duration(取樣時間)中的平均值，避免在抖動的marker的theta值不穩定, 並且去除一個標準差外的極端值
+        marker_2d_theta_list = [0.0]
+        initial_time = self.TestAction.get_clock().now().nanoseconds / 1e9
+        
+        while(abs(initial_time - (self.TestAction.get_clock().now().nanoseconds / 1e9)) < duration):
+            self.SpinOnce()
+            marker_2d_theta_list.append(self.marker_2d_theta)
+            # print("self.marker_2d_theta", self.marker_2d_theta)
+            time.sleep(0.05)
+        # print("marker_2d_theta_list", marker_2d_theta_list)
+        threshold = 0.5
+        mean = statistics.mean(marker_2d_theta_list)
+        stdev = statistics.stdev(marker_2d_theta_list)
+        upcutoff = mean + threshold * stdev
+        downcutoff = mean - threshold * stdev
+        clean_list = []
+        for i in marker_2d_theta_list:
+            if(i > downcutoff and i < upcutoff):
+                clean_list.append(i)
+        # print("clean_list", clean_list)
+        # print("mean", statistics.mean(clean_list))
+        return statistics.median(clean_list) 
+    
 class cmd_vel():
     def __init__(self, TestAction):
         self.pub_cmd_vel = TestAction.cmd_vel_pub
@@ -194,18 +230,19 @@ class TestAction(Node):
         self.fork_pub = self.create_publisher(Meteorcar, "/forklift_cmd", 1)
 
         self.action = Action(self)
-        # rate = self.create_rate(10)
+        rate = self.create_rate(10)
         while rclpy.ok():
             rclpy.spin_once(self)
-            self.get_logger().info("Move to marker dist")
-            if self.action.fnseqdead_reckoning(-0.2):
-                self.get_logger().info("Move to marker dist done")
-                break
+            self.get_logger().info("visual_servoing")
+            # if self.action.fnseqdead_reckoning(-0.2):
+            #     self.get_logger().info("Move to marker dist done")
+            #     break
+            self.action.TrustworthyMarker2DTheta(2)
             self.get_logger().info("Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
             self.get_logger().info("Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
             # rate.sleep()
             time.sleep(0.1)
-        rclpy.shutdown()
+        # rclpy.shutdown()
     
     def init_parame(self):
         # Odometry_variable
