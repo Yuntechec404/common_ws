@@ -104,6 +104,8 @@ class Action():
         self.SpinOnce()
         Kp = 0.1
         # self.marker_2d_theta= self.TrustworthyMarker2DTheta(1)
+        # print("desired_angle_turn", self.marker_2d_theta)
+        # print("threshod", threshod)
         if abs(self.marker_2d_theta) < threshod  :
             self.cmd_vel.fnStop()
             return True
@@ -218,6 +220,10 @@ class TestAction(Node):
 
         self.action = Action(self)
         rate = self.create_rate(10)
+        for i in range(10):
+            self.SpinOnce()
+            time.sleep(0.1)
+
         while rclpy.ok():
             rclpy.spin_once(self)
             self.get_logger().info("visual_servoing")
