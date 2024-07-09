@@ -102,14 +102,13 @@ class Action():
         
     def fnSeqChangingtheta(self, threshod): #旋轉到marker的theta值為0(叉車正對marker)), threshod為角度誤差值
         self.SpinOnce()
-        self.marker_2d_theta= self.TrustworthyMarker2DTheta(1)
-        desired_angle_turn = -self.marker_2d_theta
-        if abs(desired_angle_turn) < threshod  :
+        Kp = 0.1
+        # self.marker_2d_theta= self.TrustworthyMarker2DTheta(1)
+        if abs(self.marker_2d_theta) < threshod  :
             self.cmd_vel.fnStop()
-            time.sleep(0.1)
             return True
         else:
-            self.cmd_vel.fnTurn(desired_angle_turn)
+            self.cmd_vel.fnTurn(Kp, self.marker_2d_theta)
             return False
         
     def TrustworthyMarker2DTheta(self, duration): #用於計算marker的theta值再duration(取樣時間)中的平均值，避免在抖動的marker的theta值不穩定, 並且去除一個標準差外的極端值
@@ -140,21 +139,20 @@ class cmd_vel():
         self.pub_cmd_vel = TestAction.cmd_vel_pub
         self.pub_fork = TestAction.fork_pub
 
-    def cmd_pub(self, twist):
-
-        if twist.angular.z > 0.2:
-            twist.angular.z =0.2
-        elif twist.angular.z < -0.2:
-            twist.angular.z =-0.2
+    def cmd_pub(self, twist): #限制速度的範圍
+        if twist.linear.x > 0.2:
+            twist.linear.x =0.2
+        elif twist.linear.x < -0.2:
+            twist.linear.x =-0.2
         if twist.linear.x > 0 and twist.linear.x < 0.02:
             twist.linear.x =0.05
         elif twist.linear.x < 0 and twist.linear.x > -0.02:
             twist.linear.x =-0.05   
 
-        if twist.linear.x > 0.2:
-            twist.linear.x =0.2
-        elif twist.linear.x < -0.2:
-            twist.linear.x =-0.2                     
+        if twist.angular.z > 0.2:
+            twist.angular.z =0.2
+        elif twist.angular.z < -0.2:
+            twist.angular.z =-0.2                     
         if twist.angular.z > 0 and twist.angular.z < 0.05:
             twist.angular.z =0.05
         elif twist.angular.z < 0 and twist.angular.z > -0.05:
@@ -223,11 +221,11 @@ class TestAction(Node):
         while rclpy.ok():
             rclpy.spin_once(self)
             self.get_logger().info("visual_servoing")
-            if self.action.fnSeqChangingtheta(0.2):
-                self.get_logger().info("Move to marker dist done")
-                break
             self.get_logger().info("Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
             self.get_logger().info("Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
+            if self.action.fnSeqChangingtheta(0.02):
+                self.get_logger().info("Move to marker dist done")
+                break
             # rate.sleep()
             time.sleep(0.1)
         # rclpy.shutdown()
