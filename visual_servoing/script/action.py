@@ -108,9 +108,15 @@ class Action():
         # print("threshod", threshod)
         if abs(self.marker_2d_theta) < threshod  :
             self.cmd_vel.fnStop()
-            return True
+            if self.check_wait_time > 10 :
+                self.check_wait_time = 0
+                return True
+            else:
+                self.check_wait_time =self.check_wait_time  +1
+                return False
         else:
             self.cmd_vel.fnTurn(Kp, self.marker_2d_theta)
+            self.check_wait_time =0
             return False
         
     def TrustworthyMarker2DTheta(self, duration): #用於計算marker的theta值再duration(取樣時間)中的平均值，避免在抖動的marker的theta值不穩定, 並且去除一個標準差外的極端值
@@ -136,6 +142,30 @@ class Action():
         # print("mean", statistics.mean(clean_list))
         return statistics.median(clean_list) 
     
+    def fnSeqChangingDirection(self, threshod):
+        self.SpinOnce()
+        Kp = 0.3
+        desired_angle_turn = math.atan2(self.marker_2d_pose_y, self.marker_2d_pose_x)
+        
+        if desired_angle_turn <0:
+            desired_angle_turn = desired_angle_turn + math.pi
+        else:
+            desired_angle_turn = desired_angle_turn - math.pi
+
+        self.cmd_vel.fnTurn(Kp, desired_angle_turn)
+        
+        if abs(desired_angle_turn) < threshod  :
+            self.cmd_vel.fnStop()
+            if self.check_wait_time > 10 :
+                self.check_wait_time = 0
+                return True
+            else:
+                self.check_wait_time =self.check_wait_time  +1
+                return False
+        else:
+            self.check_wait_time =0
+            return False
+        
 class cmd_vel():
     def __init__(self, TestAction):
         self.pub_cmd_vel = TestAction.cmd_vel_pub
@@ -229,7 +259,7 @@ class TestAction(Node):
             self.get_logger().info("visual_servoing")
             self.get_logger().info("Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
             self.get_logger().info("Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
-            if self.action.fnSeqChangingtheta(0.02):
+            if self.action.fnSeqChangingDirection(0.02):
                 self.get_logger().info("Move to marker dist done")
                 break
             # rate.sleep()
