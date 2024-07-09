@@ -12,6 +12,10 @@ import rclpy.logging
 from rclpy.node import Node
 from enum import Enum
 import time
+
+def fnCalcDistPoints(x1, x2, y1, y2):
+    return math.sqrt((x1 - x2) ** 2. + (y1 - y2) ** 2.)
+
 class Action():
     def __init__(self, TestAction):
         # cmd_vel
@@ -49,15 +53,16 @@ class Action():
     def SpinOnce_fork(self):
         self.updownposition = self.TestAction.SpinOnce_fork()
 
-    def fnseqdead_reckoning(self, dead_reckoning_dist):#(使用里程紀計算)移動到離現在位置dead_reckoning_dist公尺的地方
+    def fnseqdead_reckoning(self, dead_reckoning_dist):#(使用里程紀計算)移動到離現在位置dead_reckoning_dist公尺的地方, 1.0 = 朝向marker前進1公尺, -1.0 = 朝向marker後退1公尺
         self.SpinOnce()
+        threshold = 0.015
         if self.is_triggered == False:
             self.is_triggered = True
             self.initial_robot_pose_x = self.robot_2d_pose_x
             self.initial_robot_pose_y = self.robot_2d_pose_y
-        dist = math.copysign(1, dead_reckoning_dist) * self.fnCalcDistPoints(self.initial_robot_pose_x, self.robot_2d_pose_x, self.initial_robot_pose_y, self.robot_2d_pose_y)
+        dist = math.copysign(1, dead_reckoning_dist) * fnCalcDistPoints(self.initial_robot_pose_x, self.robot_2d_pose_x, self.initial_robot_pose_y, self.robot_2d_pose_y)
         if math.copysign(1, dead_reckoning_dist) > 0.0:
-            if  dead_reckoning_dist - dist < 0.0:
+            if  (dead_reckoning_dist - dist - threshold) < 0.0:
                 self.cmd_vel.fnStop()
                 self.is_triggered = False
                 return True
@@ -193,13 +198,14 @@ class TestAction(Node):
         while rclpy.ok():
             rclpy.spin_once(self)
             self.get_logger().info("Move to marker dist")
-            if self.action.fnseqmove_to_marker_dist(1.5):
+            if self.action.fnseqdead_reckoning(-0.2):
                 self.get_logger().info("Move to marker dist done")
                 break
             self.get_logger().info("Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
             self.get_logger().info("Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
             # rate.sleep()
             time.sleep(0.1)
+        rclpy.shutdown()
     
     def init_parame(self):
         # Odometry_variable
