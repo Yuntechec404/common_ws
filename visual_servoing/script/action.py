@@ -56,6 +56,7 @@ class Action():
 
     def fnseqdead_reckoning(self, dead_reckoning_dist):#(使用里程紀計算)移動到離現在位置dead_reckoning_dist公尺的地方, 1.0 = 朝向marker前進1公尺, -1.0 = 朝向marker後退1公尺
         self.SpinOnce()
+        Kp = 0.2
         threshold = 0.015
         if self.is_triggered == False:
             self.is_triggered = True
@@ -68,7 +69,7 @@ class Action():
                 self.is_triggered = False
                 return True
             else:
-                self.cmd_vel.fnGoStraight(-(dead_reckoning_dist - dist))
+                self.cmd_vel.fnGoStraight(Kp, -(dead_reckoning_dist - dist))
                 return False
         elif math.copysign(1, dead_reckoning_dist) < 0.0:
             if  dead_reckoning_dist - dist > 0.0:
@@ -76,11 +77,12 @@ class Action():
                 self.is_triggered = False
                 return True
             else:
-                self.cmd_vel.fnGoStraight(-(dead_reckoning_dist - dist))
+                self.cmd_vel.fnGoStraight(Kp, -(dead_reckoning_dist - dist))
                 return False
 
     def fnseqmove_to_marker_dist(self, marker_dist): #(使用marker計算) 移動到距離marker_dist公尺的位置
         self.SpinOnce()
+        Kp = 0.2
         if(marker_dist < 2.0):
             threshold = 0.015
         else:
@@ -89,16 +91,16 @@ class Action():
         dist = math.sqrt(self.marker_2d_pose_x**2 + self.marker_2d_pose_y**2)
         
         if dist < (marker_dist-threshold):
-            self.cmd_vel.fnGoStraight(marker_dist - dist)
+            self.cmd_vel.fnGoStraight(Kp, marker_dist - dist)
             return False
         elif dist > (marker_dist+threshold):
-            self.cmd_vel.fnGoStraight(marker_dist - dist)
+            self.cmd_vel.fnGoStraight(Kp, marker_dist - dist)
             return False
         else:
             self.cmd_vel.fnStop()
             return True
         
-    def fnSeqChangingtheta(self, threshod):
+    def fnSeqChangingtheta(self, threshod): #旋轉到marker的theta值為0(叉車正對marker)), threshod為角度誤差值
         self.SpinOnce()
         self.marker_2d_theta= self.TrustworthyMarker2DTheta(1)
         desired_angle_turn = -self.marker_2d_theta
@@ -107,7 +109,7 @@ class Action():
             time.sleep(0.1)
             return True
         else:
-            self.TurnByTime(desired_angle_turn*2, 1)
+            self.cmd_vel.fnTurn(desired_angle_turn)
             return False
         
     def TrustworthyMarker2DTheta(self, duration): #用於計算marker的theta值再duration(取樣時間)中的平均值，避免在抖動的marker的theta值不穩定, 並且去除一個標準差外的極端值
@@ -169,27 +171,14 @@ class cmd_vel():
         twist = Twist()
         self.cmd_pub(twist)
 
-    def fnTurn(self, theta):
-        Kp = 0.3 #1.0
-        angular_z = Kp * theta
+    def fnTurn(self, Kp, theta):
         twist = Twist()
-        twist.linear.x = 0
-        twist.linear.y = 0
-        twist.linear.z = 0
-        twist.angular.x = 0
-        twist.angular.y = 0
-        twist.angular.z = -angular_z
+        twist.angular.z = Kp * theta
         self.cmd_pub(twist)
 
-    def fnGoStraight(self,v):
-        Kp = 0.2
+    def fnGoStraight(self, Kp, v):
         twist = Twist()
         twist.linear.x = Kp*v
-        twist.linear.y = 0.
-        twist.linear.z = 0.
-        twist.angular.x = 0.
-        twist.angular.y = 0.
-        twist.angular.z = 0.
         self.cmd_pub(twist)
 
     def fnGoBack(self):
@@ -234,10 +223,9 @@ class TestAction(Node):
         while rclpy.ok():
             rclpy.spin_once(self)
             self.get_logger().info("visual_servoing")
-            # if self.action.fnseqdead_reckoning(-0.2):
-            #     self.get_logger().info("Move to marker dist done")
-            #     break
-            self.action.TrustworthyMarker2DTheta(2)
+            if self.action.fnSeqChangingtheta(0.2):
+                self.get_logger().info("Move to marker dist done")
+                break
             self.get_logger().info("Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
             self.get_logger().info("Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
             # rate.sleep()
