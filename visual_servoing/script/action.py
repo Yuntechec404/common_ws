@@ -238,7 +238,7 @@ class Action():
                 desired_angle_turn = (math.pi / 2.0) + (self.robot_2d_theta - self.initial_robot_pose_theta)
             elif self.initial_marker_pose_theta > 0.0:
                 desired_angle_turn = -(math.pi / 2.0) + (self.robot_2d_theta - self.initial_robot_pose_theta)
-            print("desired_angle_turn", desired_angle_turn)
+            # print("desired_angle_turn", desired_angle_turn)
             desired_angle_turn = -1. * desired_angle_turn
             self.cmd_vel.fnTurn(Kp, desired_angle_turn)
             if abs(desired_angle_turn) < 0.01:
@@ -289,6 +289,25 @@ class Action():
         else:
             self.check_wait_time =0
             return False
+        
+    def fnForkUpdown(self, desired_updownposition):#0~2.7
+        self.SpinOnce_fork()
+        fork_threshold = 0.001
+        if(desired_updownposition < 0):
+            self.TestAction.get_logger().error("desired_updownposition should be greater than 0")
+            return True
+        print("desired_updownposition", desired_updownposition)
+        print("self.updownposition", self.updownposition)
+        if self.updownposition < desired_updownposition - fork_threshold:
+            self.cmd_vel.fnfork(2000.0)
+            return False
+        elif self.updownposition > desired_updownposition + fork_threshold:
+            self.cmd_vel.fnfork(-2000.0)
+            return False
+        else:
+            self.cmd_vel.fnfork(0.0)
+            return True
+        
 class cmd_vel():
     def __init__(self, TestAction):
         self.pub_cmd_vel = TestAction.cmd_vel_pub
@@ -315,11 +334,6 @@ class cmd_vel():
         
         self.pub_cmd_vel.publish(twist)
 
-    def fork_pub(self, direction):
-        fork = Meteorcar()
-        fork.fork_position = direction
-        self.pub_fork.publish(fork)
-
     def fnStop(self):
         twist = Twist()
         self.cmd_pub(twist)
@@ -334,21 +348,10 @@ class cmd_vel():
         twist.linear.x = Kp * v
         self.cmd_pub(twist)
 
-    def fnGoBack(self):
-        twist = Twist()
-        twist.linear.x = 0.1
-        twist.linear.y = 0
-        twist.linear.z = 0
-        twist.angular.x = 0
-        twist.angular.y = 0
-        twist.angular.z = 0
-        self.cmd_pub(twist)
-
-    def fnfork(self,direction):
-        fork = Meteorcar()
-        fork.fork_position = direction
-        self.fork_pub(fork)
-
+    def fnfork(self,velocity):
+        fork_msg = Meteorcar()
+        fork_msg.fork_velocity = velocity
+        self.pub_fork.publish(fork_msg)
 
     def fnTrackMarker(self, theta):
         Kp = 2.0 #6.5
@@ -365,7 +368,7 @@ class TestAction(Node):
         self.shelf_sub = self.create_subscription(PoseArray, "/apriltag_poses", self.shelf_callback, qos_profile=qos_profile_sensor_data)
         self.forkpose_sub = self.create_subscription(Meteorcar, "/forklift_pose", self.cbGetforkpos, qos_profile=qos_profile_sensor_data)
         self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", 1)
-        self.fork_pub = self.create_publisher(Meteorcar, "/forklift_cmd", 1)
+        self.fork_pub = self.create_publisher(Meteorcar, "/cmd_fork", 1)
 
         self.action = Action(self)
         rate = self.create_rate(10)
@@ -378,17 +381,17 @@ class TestAction(Node):
             self.get_logger().info("visual_servoing fnSeqChangingDirection")
             self.get_logger().info("Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
             self.get_logger().info("Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
-            if self.action.fnSeqParking(0.5):
-                self.get_logger().info("Move to marker dist done")
+            self.get_logger().info("Forklift Pose: updownposition={:.3f}".format(self.updownposition))
+            if self.action.fnForkUpdown(0.0):
                 break
             time.sleep(0.1)
 
-        while rclpy.ok():
-            rclpy.spin_once(self)
-            self.get_logger().info("visual_servoing fnSeqChangingDirection")
-            self.get_logger().info("Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
-            self.get_logger().info("Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
-            time.sleep(0.1)
+        # while rclpy.ok():
+        #     rclpy.spin_once(self)
+        #     self.get_logger().info("visual_servoing fnSeqChangingDirection")
+        #     self.get_logger().info("Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
+        #     self.get_logger().info("Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
+        #     time.sleep(0.1)
     
     def init_parame(self):
         # Odometry_variable
