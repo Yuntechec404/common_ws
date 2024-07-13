@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # third party
-import time
-import math # math.pi
-import tf_transformations # euler_from_quaternion
+import math # using math.pi
+import tf_transformations # using euler_from_quaternion
 # message
 from visual_servoing.action import VisualServoing
-from geometry_msgs.msg import PoseArray, Pose
+from geometry_msgs.msg import PoseArray, Pose, Twist
 from nav_msgs.msg import Odometry
 from forklift_driver.msg import Meteorcar
 # ROS2 
@@ -13,19 +12,27 @@ import rclpy
 from rclpy.action import ActionServer
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
+from rclpy.executors import MultiThreadedExecutor
+# The MultiThreadedExecutor can be used to execute multiple callbacks groups in multiple threads.
+from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
+# The ReentrantCallbackGroup creates a group of reentrant callbacks that can be called from multiple threads.
+# The MutuallyExclusiveCallbackGroup creates a group of mutually exclusive callbacks that can be called from multiple threads.
 # 動作流程
-from action_sequence import ActionSequences
+from action_sequence import ActionSequence
 
 class VisualServoingActionServer(Node):
     def __init__(self):
         super().__init__('VisualServoing_action_server')
+        self.callback_group = ReentrantCallbackGroup()
+        self.callback_group2 = MutuallyExclusiveCallbackGroup()
         self.init_parame()
         self.get_parameters()
         self.create_subscriber()
-        self.action_sequence = ActionSequences(self)
-        self._action_server = ActionServer(self, VisualServoing, 'VisualServoing', self.execute_callback)
+        self.action_sequence = ActionSequence(self)
+        
+        self._action_server = ActionServer(self, VisualServoing, 'VisualServoing', self.execute_callback, callback_group=self.callback_group2)
 
-    def execute_callback(self, goal_handle):
+    async def execute_callback(self, goal_handle):
         self.get_logger().info('Received goal: Command={}, Layer={}'.format(goal_handle.request.command, goal_handle.request.layer))
         if(goal_handle.request.command == "parking_bodycamera"):
             self.action_sequence.parking_bodycamera(goal_handle, goal_handle.request.layer)
@@ -35,10 +42,15 @@ class VisualServoingActionServer(Node):
             self.action_sequence.raise_pallet(goal_handle, goal_handle.request.layer)
         elif(goal_handle.request.command == "drop_pallet"):
             self.action_sequence.drop_pallet(goal_handle, goal_handle.request.layer)
-
+        else:
+            self.get_logger().info("Unknown command")
+            goal_handle.abort()
+            return VisualServoing.Result()
+        
         goal_handle.succeed()
         result = VisualServoing.Result()
         result.result = "success"
+        self.get_logger().info('Goal execution succeeded')
         return result
     
     def init_parame(self):
@@ -69,53 +81,145 @@ class VisualServoingActionServer(Node):
         self.forkpose_topic = self.get_parameter('forkpose_topic').get_parameter_value().string_value
 
         self.get_logger().info("Get subscriber topic parameter")
-        self.get_logger().info("odom_topic: {}".format(self.odom_topic))
-        self.get_logger().info("shelf_topic: {}".format(self.shelf_topic))
-        self.get_logger().info("pallet_topic: {}".format(self.pallet_topic))
-        self.get_logger().info("forkpose_topic: {}".format(self.forkpose_topic))
+        self.get_logger().info("odom_topic: {}, type: {}".format(self.odom_topic, type(self.odom_topic)))
+        self.get_logger().info("shelf_topic: {}, type: {}".format(self.shelf_topic, type(self.shelf_topic)))
+        self.get_logger().info("pallet_topic: {}, type: {}".format(self.pallet_topic, type(self.pallet_topic)))
+        self.get_logger().info("forkpose_topic: {}, type: {}".format(self.forkpose_topic, type(self.forkpose_topic)))
 
         # get bodycamera parking parameter
-        self.declare_parameter('bodycamera_tag_offset_x', -0.03)
+        self.declare_parameter('bodycamera_tag_offset_x', 0.0)
         self.bodycamera_tag_offset_x = self.get_parameter('bodycamera_tag_offset_x').get_parameter_value().double_value
-        self.declare_parameter('bodycamera_parking_fork_init', -0.1)
+        self.declare_parameter('bodycamera_parking_fork_init', 0.0)
         self.bodycamera_parking_fork_init = self.get_parameter('bodycamera_parking_fork_init').get_parameter_value().double_value
-        self.declare_parameter('bodycamera_ChangingDirection_threshold', 0.01)
+        self.declare_parameter('bodycamera_ChangingDirection_threshold', 0.0)
         self.bodycamera_ChangingDirection_threshold = self.get_parameter('bodycamera_ChangingDirection_threshold').get_parameter_value().double_value
-        self.declare_parameter('bodycamera_parking_stop', 0.5)
+        self.declare_parameter('bodycamera_desired_dist_threshold', 0.0)
+        self.bodycamera_desired_dist_threshold = self.get_parameter('bodycamera_desired_dist_threshold').get_parameter_value().double_value
+        self.declare_parameter('bodycamera_parking_stop', 0.0)
         self.bodycamera_parking_stop = self.get_parameter('bodycamera_parking_stop').get_parameter_value().double_value
-        self.declare_parameter('bodycamera_Changingtheta_threshold', 0.025)
+        self.declare_parameter('bodycamera_Changingtheta_threshold', 0.0)
         self.bodycamera_Changingtheta_threshold = self.get_parameter('bodycamera_Changingtheta_threshold').get_parameter_value().double_value
-        self.declare_parameter('bodycamera_decide_distance', 0.025)
+        self.declare_parameter('bodycamera_decide_distance', 0.0)
         self.bodycamera_decide_distance = self.get_parameter('bodycamera_decide_distance').get_parameter_value().double_value
-        self.declare_parameter('bodycamera_back_distance', 1.10)
+        self.declare_parameter('bodycamera_back_distance', 0.0)
         self.bodycamera_back_distance = self.get_parameter('bodycamera_back_distance').get_parameter_value().double_value
+        
+        self.get_logger().info("Get bodycamera parking parameter")
+        self.get_logger().info("bodycamera_tag_offset_x: {}, type: {}".format(self.bodycamera_tag_offset_x, type(self.bodycamera_tag_offset_x)))
+        self.get_logger().info("bodycamera_parking_fork_init: {}, type: {}".format(self.bodycamera_parking_fork_init, type(self.bodycamera_parking_fork_init)))
+        self.get_logger().info("bodycamera_ChangingDirection_threshold: {}, type: {}".format(self.bodycamera_ChangingDirection_threshold, type(self.bodycamera_ChangingDirection_threshold)))
+        self.get_logger().info("bodycamera_desired_dist_threshold: {}, type: {}".format(self.bodycamera_desired_dist_threshold, type(self.bodycamera_desired_dist_threshold)))
+        self.get_logger().info("bodycamera_parking_stop: {}, type: {}".format(self.bodycamera_parking_stop, type(self.bodycamera_parking_stop)))
+        self.get_logger().info("bodycamera_Changingtheta_threshold: {}, type: {}".format(self.bodycamera_Changingtheta_threshold, type(self.bodycamera_Changingtheta_threshold)))
+        self.get_logger().info("bodycamera_decide_distance: {}, type: {}".format(self.bodycamera_decide_distance, type(self.bodycamera_decide_distance)))
+        self.get_logger().info("bodycamera_back_distance: {}, type: {}".format(self.bodycamera_back_distance, type(self.bodycamera_back_distance)))
+
         # get forkcamera parking parameter
         self.declare_parameter('forkcamera_parking_fork_layer1', 0.0)
         self.forkcamera_parking_fork_layer1 = self.get_parameter('forkcamera_parking_fork_layer1').get_parameter_value().double_value
-        self.declare_parameter('forkcamera_parking_fork_layer2', 0.3)
+        self.declare_parameter('forkcamera_parking_fork_layer2', 0.0)
         self.forkcamera_parking_fork_layer2 = self.get_parameter('forkcamera_parking_fork_layer2').get_parameter_value().double_value
         self.declare_parameter('forkcamera_tag_offset_x', 0.0)
+        self.forkcamera_tag_offset_x = self.get_parameter('forkcamera_tag_offset_x').get_parameter_value().double_value
+        self.declare_parameter('forkcamera_ChangingDirection_threshold', 0.0)
+        self.forkcamera_ChangingDirection_threshold = self.get_parameter('forkcamera_ChangingDirection_threshold').get_parameter_value().double_value
+        self.declare_parameter('forkcamera_parking_stop', 0.0)
+        self.forkcamera_parking_stop = self.get_parameter('forkcamera_parking_stop').get_parameter_value().double_value
+        self.declare_parameter('forkcamera_Changingtheta_threshold', 0.0)
+        self.forkcamera_Changingtheta_threshold = self.get_parameter('forkcamera_Changingtheta_threshold').get_parameter_value().double_value
+        self.declare_parameter('forkcamera_decide_distance', 0.0)
+        self.forkcamera_decide_distance = self.get_parameter('forkcamera_decide_distance').get_parameter_value().double_value
+        self.declare_parameter('forkcamera_back_distance', 0.0)
+        self.forkcamera_back_distance = self.get_parameter('forkcamera_back_distance').get_parameter_value().double_value
+
+        self.get_logger().info("Get forkcamera parking parameter")
+        self.get_logger().info("forkcamera_parking_fork_layer1: {}, type: {}".format(self.forkcamera_parking_fork_layer1, type(self.forkcamera_parking_fork_layer1)))
+        self.get_logger().info("forkcamera_parking_fork_layer2: {}, type: {}".format(self.forkcamera_parking_fork_layer2, type(self.forkcamera_parking_fork_layer2)))
+        self.get_logger().info("forkcamera_tag_offset_x: {}, type: {}".format(self.forkcamera_tag_offset_x, type(self.forkcamera_tag_offset_x)))
+        self.get_logger().info("forkcamera_ChangingDirection_threshold: {}, type: {}".format(self.forkcamera_ChangingDirection_threshold, type(self.forkcamera_ChangingDirection_threshold)))
+        self.get_logger().info("forkcamera_parking_stop: {}, type: {}".format(self.forkcamera_parking_stop, type(self.forkcamera_parking_stop)))
+        self.get_logger().info("forkcamera_Changingtheta_threshold: {}, type: {}".format(self.forkcamera_Changingtheta_threshold, type(self.forkcamera_Changingtheta_threshold)))
+        self.get_logger().info("forkcamera_decide_distance: {}, type: {}".format(self.forkcamera_decide_distance, type(self.forkcamera_decide_distance)))
+        self.get_logger().info("forkcamera_back_distance: {}, type: {}".format(self.forkcamera_back_distance, type(self.forkcamera_back_distance)))
+
+        # get raise_pallet parameter
+        self.declare_parameter('raise_pallet_fork_init_layer1', 0.0)
+        self.raise_pallet_fork_init_layer1 = self.get_parameter('raise_pallet_fork_init_layer1').get_parameter_value().double_value   
+        self.declare_parameter('raise_pallet_fork_init_layer2', 0.0)
+        self.raise_pallet_fork_init_layer2 = self.get_parameter('raise_pallet_fork_init_layer2').get_parameter_value().double_value
+        self.declare_parameter('raise_pallet_dead_reckoning_dist', 0.0)
+        self.raise_pallet_dead_reckoning_dist = self.get_parameter('raise_pallet_dead_reckoning_dist').get_parameter_value().double_value
+        self.declare_parameter('raise_pallet_fork_forward_distance', 0.0)
+        self.raise_pallet_fork_forward_distance = self.get_parameter('raise_pallet_fork_forward_distance').get_parameter_value().double_value
+        self.declare_parameter('raise_pallet_raise_height_layer1', 0.0)
+        self.raise_pallet_raise_height_layer1 = self.get_parameter('raise_pallet_raise_height_layer1').get_parameter_value().double_value
+        self.declare_parameter('raise_pallet_raise_height_layer2', 0.0)
+        self.raise_pallet_raise_height_layer2 = self.get_parameter('raise_pallet_raise_height_layer2').get_parameter_value().double_value
+        self.declare_parameter('raise_pallet_back_distance', 0.0)
+        self.raise_pallet_back_distance = self.get_parameter('raise_pallet_back_distance').get_parameter_value().double_value
+        self.declare_parameter('raise_pallet_navigation_helght', 0.0)
+        self.raise_pallet_navigation_helght = self.get_parameter('raise_pallet_navigation_helght').get_parameter_value().double_value
+
+        self.get_logger().info("Get raise_pallet parameter")
+        self.get_logger().info("raise_pallet_fork_init_layer1: {}, type: {}".format(self.raise_pallet_fork_init_layer1, type(self.raise_pallet_fork_init_layer1)))
+        self.get_logger().info("raise_pallet_fork_init_layer2: {}, type: {}".format(self.raise_pallet_fork_init_layer2, type(self.raise_pallet_fork_init_layer2)))
+        self.get_logger().info("raise_pallet_dead_reckoning_dist: {}, type: {}".format(self.raise_pallet_dead_reckoning_dist, type(self.raise_pallet_dead_reckoning_dist)))
+        self.get_logger().info("raise_pallet_fork_forward_distance: {}, type: {}".format(self.raise_pallet_fork_forward_distance, type(self.raise_pallet_fork_forward_distance)))
+        self.get_logger().info("raise_pallet_raise_height_layer1: {}, type: {}".format(self.raise_pallet_raise_height_layer1, type(self.raise_pallet_raise_height_layer1)))
+        self.get_logger().info("raise_pallet_raise_height_layer2: {}, type: {}".format(self.raise_pallet_raise_height_layer2, type(self.raise_pallet_raise_height_layer2)))
+        self.get_logger().info("raise_pallet_back_distance: {}, type: {}".format(self.raise_pallet_back_distance, type(self.raise_pallet_back_distance)))
+        self.get_logger().info("raise_pallet_navigation_helght: {}, type: {}".format(self.raise_pallet_navigation_helght, type(self.raise_pallet_navigation_helght)))
+
+        # get drop_pallet parameter
+        self.declare_parameter('drop_pallet_fork_init_layer1', 0.0)
+        self.drop_pallet_fork_init_layer1 = self.get_parameter('drop_pallet_fork_init_layer1').get_parameter_value().double_value
+        self.declare_parameter('drop_pallet_fork_init_layer2', 0.0)
+        self.drop_pallet_fork_init_layer2 = self.get_parameter('drop_pallet_fork_init_layer2').get_parameter_value().double_value
+        self.declare_parameter('drop_pallet_dead_reckoning_dist', 0.0)
+        self.drop_pallet_dead_reckoning_dist = self.get_parameter('drop_pallet_dead_reckoning_dist').get_parameter_value().double_value
+        self.declare_parameter('drop_pallet_fork_forward_distance', 0.0)
+        self.drop_pallet_fork_forward_distance = self.get_parameter('drop_pallet_fork_forward_distance').get_parameter_value().double_value
+        self.declare_parameter('drop_pallet_drop_height_layer1', 0.0)
+        self.drop_pallet_drop_height_layer1 = self.get_parameter('drop_pallet_drop_height_layer1').get_parameter_value().double_value
+        self.declare_parameter('drop_pallet_drop_height_layer2', 0.0)
+        self.drop_pallet_drop_height_layer2 = self.get_parameter('drop_pallet_drop_height_layer2').get_parameter_value().double_value
+        self.declare_parameter('drop_pallet_back_distance', 0.0)
+        self.drop_pallet_back_distance = self.get_parameter('drop_pallet_back_distance').get_parameter_value().double_value
+        self.declare_parameter('drop_pallet_navigation_helght', 0.0)
+        self.drop_pallet_navigation_helght = self.get_parameter('drop_pallet_navigation_helght').get_parameter_value().double_value
+
+        self.get_logger().info("Get drop_pallet parameter")
+        self.get_logger().info("drop_pallet_fork_init_layer1: {}, type: {}".format(self.drop_pallet_fork_init_layer1, type(self.drop_pallet_fork_init_layer1)))
+        self.get_logger().info("drop_pallet_fork_init_layer2: {}, type: {}".format(self.drop_pallet_fork_init_layer2, type(self.drop_pallet_fork_init_layer2)))
+        self.get_logger().info("drop_pallet_dead_reckoning_dist: {}, type: {}".format(self.drop_pallet_dead_reckoning_dist, type(self.drop_pallet_dead_reckoning_dist)))
+        self.get_logger().info("drop_pallet_fork_forward_distance: {}, type: {}".format(self.drop_pallet_fork_forward_distance, type(self.drop_pallet_fork_forward_distance)))
+        self.get_logger().info("drop_pallet_drop_height_layer1: {}, type: {}".format(self.drop_pallet_drop_height_layer1, type(self.drop_pallet_drop_height_layer1)))
+        self.get_logger().info("drop_pallet_drop_height_layer2: {}, type: {}".format(self.drop_pallet_drop_height_layer2, type(self.drop_pallet_drop_height_layer2)))
+        self.get_logger().info("drop_pallet_back_distance: {}, type: {}".format(self.drop_pallet_back_distance, type(self.drop_pallet_back_distance)))
+        self.get_logger().info("drop_pallet_navigation_helght: {}, type: {}".format(self.drop_pallet_navigation_helght, type(self.drop_pallet_navigation_helght)))
 
     def create_subscriber(self):
-        self.odom_sub = self.create_subscription(Odometry, self.odom_topic, self.odom_callback, qos_profile=qos_profile_sensor_data)
-        self.shelf_sub = self.create_subscription(PoseArray, self.shelf_topic, self.shelf_callback, qos_profile=qos_profile_sensor_data)
-        self.pallet_sub = self.create_subscription(Pose, self.pallet_topic, self.pallet_callback, qos_profile=qos_profile_sensor_data)
-        self.forkpose_sub = self.create_subscription(Meteorcar, self.forkpose_topic, self.cbGetforkpos, qos_profile=qos_profile_sensor_data)
-    
+        self.odom_sub = self.create_subscription(Odometry, self.odom_topic, self.odom_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
+        self.shelf_sub = self.create_subscription(PoseArray, self.shelf_topic, self.shelf_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
+        self.pallet_sub = self.create_subscription(Pose, self.pallet_topic, self.pallet_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
+        self.forkpose_sub = self.create_subscription(Meteorcar, self.forkpose_topic, self.cbGetforkpos, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
+        self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", 1, callback_group=self.callback_group)
+        self.fork_pub = self.create_publisher(Meteorcar, "/cmd_fork", 1, callback_group=self.callback_group)
+
     def log_info(self):
         rclpy.spin_once(self)
-        # self.get_logger().info("Odom: x={}, y={}, theta={}".format(
-        #     self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
+        self.get_logger().info("Odom: x={}, y={}, theta={}".format(
+        self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
         self.get_logger().info("Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, (self.marker_2d_theta*180/math.pi)))
-        # self.get_logger().info("Fork position: {}".format(self.updownposition))
-        
+        self.get_logger().info("Fork position: {}".format(self.updownposition))
+
     def SpinOnce(self):
-        rclpy.spin_once(self)
+        # rclpy.spin_once(self)
         return self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta, \
                self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta
     
     def SpinOnce_fork(self):
-        rclpy.spin_once(self)
+        # rclpy.spin_once(self)
         return self.updownposition
 
     def odom_callback(self, msg):
@@ -176,16 +280,27 @@ class VisualServoingActionServer(Node):
             pass
 
     def cbGetforkpos(self, msg):
+        # self.get_logger().info("cbGetforkpos")
         self.updownposition = msg.fork_position
 
 def main(args=None):
     rclpy.init(args=args)
 
     VisualServoing_action_server = VisualServoingActionServer()
+    executor = MultiThreadedExecutor(num_threads=3)
+
     try:
-        rclpy.spin(VisualServoing_action_server)
+        executor.add_node(VisualServoing_action_server)
+        executor.spin()
     except KeyboardInterrupt:
         pass
+    finally:
+        executor.shutdown()
+        VisualServoing_action_server.destroy_node()
+    # try:
+    #     rclpy.spin(VisualServoing_action_server)
+    # except KeyboardInterrupt:
+    #     pass
 
 
 if __name__ == '__main__':

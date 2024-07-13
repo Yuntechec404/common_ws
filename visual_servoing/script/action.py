@@ -166,7 +166,7 @@ class Action():
             self.check_wait_time =0
             return False
         
-    def fnSeqMovingNearbyParkingLot(self):
+    def fnSeqMovingNearbyParkingLot(self, desired_dist_threshold): #如果desired_dist的值小於desired_dist_threshold, 則不執行此動作
         self.SpinOnce()
         Kp = 0.2
         if self.current_nearby_sequence == self.NearbySequence.initial_turn.value:
@@ -181,7 +181,7 @@ class Action():
                 # print("initial_marker_pose_theta ", self.initial_marker_pose_theta)
                 # decide doing fnSeqMovingNearbyParkingLot or not
                 desired_dist = -1* self.initial_marker_pose_x * abs(math.cos((math.pi / 2.) - self.initial_marker_pose_theta))
-                if abs(desired_dist) < 0.05:
+                if abs(desired_dist) < desired_dist_threshold:
                     return True
             
             if self.initial_marker_pose_theta < 0.0:
@@ -291,13 +291,14 @@ class Action():
             return False
         
     def fnForkUpdown(self, desired_updownposition):#0~2.7
+        self.TestAction.get_logger().info("self.SpinOnce_fork() bedore")
         self.SpinOnce_fork()
+        self.TestAction.get_logger().info("self.SpinOnce_fork() after")
         fork_threshold = 0.001
         if(desired_updownposition < 0):
-            self.TestAction.get_logger().error("desired_updownposition should be greater than 0")
             return True
-        print("desired_updownposition", desired_updownposition)
-        print("self.updownposition", self.updownposition)
+        # print("desired_updownposition", desired_updownposition)
+        # print("self.updownposition", self.updownposition)
         if self.updownposition < desired_updownposition - fork_threshold:
             self.cmd_vel.fnfork(2000.0)
             return False
@@ -307,6 +308,14 @@ class Action():
         else:
             self.cmd_vel.fnfork(0.0)
             return True
+        
+    def fnSeqdecide(self, decide_dist):#decide_dist偏離多少公分要後退
+        self.SpinOnce()
+        dist = self.marker_2d_pose_y
+        if  abs(dist) < abs(decide_dist):
+            return True
+        else:
+            return False
         
 class cmd_vel():
     def __init__(self, TestAction):
@@ -359,6 +368,9 @@ class cmd_vel():
         twist.linear.x = -0.05
         twist.angular.z = Kp * theta
         self.cmd_pub(twist)
+
+'''
+Unit Test for Action class
 
 class TestAction(Node):
     def __init__(self):
@@ -471,3 +483,5 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
+'''
