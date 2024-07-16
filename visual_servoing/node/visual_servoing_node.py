@@ -35,8 +35,10 @@ class VisualServoingActionServer(Node):
     async def execute_callback(self, goal_handle):
         self.get_logger().info('Received goal: Command={}, Layer={}'.format(goal_handle.request.command, goal_handle.request.layer))
         if(goal_handle.request.command == "parking_bodycamera"):
+            self.shelf_or_pallet = True  # True: shelf, False: pallet
             self.action_sequence.parking_bodycamera(goal_handle, goal_handle.request.layer)
         elif(goal_handle.request.command == "parking_forkcamera"):
+            self.shelf_or_pallet = False  # True: shelf, False: pallet
             self.action_sequence.parking_forkcamera(goal_handle, goal_handle.request.layer)
         elif(goal_handle.request.command == "raise_pallet"):
             self.action_sequence.raise_pallet(goal_handle, goal_handle.request.layer)
