@@ -28,6 +28,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 
 install(PROGRAMS
   node/visual_servoing_node.py
+  node/pose_visualization.py
   script/action_sequence.py
   script/action.py 
   DESTINATION lib/${PROJECT_NAME}
