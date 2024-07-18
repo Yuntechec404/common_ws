@@ -41,8 +41,10 @@ class VisualServoingActionServer(Node):
             self.shelf_or_pallet = False  # True: shelf, False: pallet
             self.action_sequence.parking_forkcamera(goal_handle, goal_handle.request.layer)
         elif(goal_handle.request.command == "raise_pallet"):
+            self.shelf_or_pallet = True
             self.action_sequence.raise_pallet(goal_handle, goal_handle.request.layer)
         elif(goal_handle.request.command == "drop_pallet"):
+            self.shelf_or_pallet = True
             self.action_sequence.drop_pallet(goal_handle, goal_handle.request.layer)
         else:
             self.get_logger().info("Unknown command")
@@ -125,6 +127,8 @@ class VisualServoingActionServer(Node):
         self.forkcamera_tag_offset_x = self.get_parameter('forkcamera_tag_offset_x').get_parameter_value().double_value
         self.declare_parameter('forkcamera_ChangingDirection_threshold', 0.0)
         self.forkcamera_ChangingDirection_threshold = self.get_parameter('forkcamera_ChangingDirection_threshold').get_parameter_value().double_value
+        self.declare_parameter('forkcamera_desired_dist_threshold', 0.0)
+        self.forkcamera_desired_dist_threshold = self.get_parameter('forkcamera_desired_dist_threshold').get_parameter_value().double_value
         self.declare_parameter('forkcamera_parking_stop', 0.0)
         self.forkcamera_parking_stop = self.get_parameter('forkcamera_parking_stop').get_parameter_value().double_value
         self.declare_parameter('forkcamera_Changingtheta_threshold', 0.0)
@@ -151,8 +155,6 @@ class VisualServoingActionServer(Node):
         self.raise_pallet_fork_init_layer2 = self.get_parameter('raise_pallet_fork_init_layer2').get_parameter_value().double_value
         self.declare_parameter('raise_pallet_dead_reckoning_dist', 0.0)
         self.raise_pallet_dead_reckoning_dist = self.get_parameter('raise_pallet_dead_reckoning_dist').get_parameter_value().double_value
-        self.declare_parameter('raise_pallet_fork_forward_distance', 0.0)
-        self.raise_pallet_fork_forward_distance = self.get_parameter('raise_pallet_fork_forward_distance').get_parameter_value().double_value
         self.declare_parameter('raise_pallet_raise_height_layer1', 0.0)
         self.raise_pallet_raise_height_layer1 = self.get_parameter('raise_pallet_raise_height_layer1').get_parameter_value().double_value
         self.declare_parameter('raise_pallet_raise_height_layer2', 0.0)
@@ -166,7 +168,6 @@ class VisualServoingActionServer(Node):
         self.get_logger().info("raise_pallet_fork_init_layer1: {}, type: {}".format(self.raise_pallet_fork_init_layer1, type(self.raise_pallet_fork_init_layer1)))
         self.get_logger().info("raise_pallet_fork_init_layer2: {}, type: {}".format(self.raise_pallet_fork_init_layer2, type(self.raise_pallet_fork_init_layer2)))
         self.get_logger().info("raise_pallet_dead_reckoning_dist: {}, type: {}".format(self.raise_pallet_dead_reckoning_dist, type(self.raise_pallet_dead_reckoning_dist)))
-        self.get_logger().info("raise_pallet_fork_forward_distance: {}, type: {}".format(self.raise_pallet_fork_forward_distance, type(self.raise_pallet_fork_forward_distance)))
         self.get_logger().info("raise_pallet_raise_height_layer1: {}, type: {}".format(self.raise_pallet_raise_height_layer1, type(self.raise_pallet_raise_height_layer1)))
         self.get_logger().info("raise_pallet_raise_height_layer2: {}, type: {}".format(self.raise_pallet_raise_height_layer2, type(self.raise_pallet_raise_height_layer2)))
         self.get_logger().info("raise_pallet_back_distance: {}, type: {}".format(self.raise_pallet_back_distance, type(self.raise_pallet_back_distance)))

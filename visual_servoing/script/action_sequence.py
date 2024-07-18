@@ -14,7 +14,30 @@ ParkingBodyCameraSequence = Enum( 'ParkingSequence', \
                         back \
                         stop \
                         error')
-
+ParkingForkCameraSequence = Enum( 'ParkingSequence', \
+                        'init_fork \
+                        changing_direction \
+                        move_nearby_parking_lot \
+                        parking \
+                        changingtheta \
+                        decide \
+                        back \
+                        stop \
+                        error')
+RaisePalletSequence = Enum( 'ParkingSequence', \
+                        'init_fork \
+                        dead_reckoning \
+                        fork_updown \
+                        back \
+                        stop \
+                        error')
+DropPalletSequence = Enum( 'ParkingSequence', \
+                        'init_fork \
+                        dead_reckoning \
+                        fork_updown \
+                        back \
+                        stop \
+                        error')
 class ActionSequence():
     def __init__(self, VisualServoingActionServer):
         self.visual_servoing_action_server = VisualServoingActionServer  # access function {SpinOnce(), SpinOnce_Fork()} and parameter and Node{ROS2 API}
@@ -71,7 +94,7 @@ class ActionSequence():
                     current_sequence = ParkingBodyCameraSequence.back.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingBodyCameraSequence.back.value):
-                self.is_sequence_finished = self.action.fnseqmove_to_marker_dist(self.visual_servoing_action_server.bodycamera_back_distance)
+                self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.bodycamera_back_distance)
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingBodyCameraSequence.parking.value
@@ -80,5 +103,159 @@ class ActionSequence():
             elif(current_sequence == ParkingBodyCameraSequence.stop.value):
                 return
                 
+    def parking_forkcamera(self, goal_handle, layer):
+        current_sequence = ParkingForkCameraSequence.init_fork.value
 
+        while not goal_handle.is_cancel_requested:
+            time.sleep(0.1)
+            feedback = str(ParkingForkCameraSequence(current_sequence))
+            self.visual_servoing_action_server.get_logger().info('Feedback: {0}'.format(feedback))
 
+            if(current_sequence == ParkingForkCameraSequence.init_fork.value):
+                if layer == 1:
+                    self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.forkcamera_parking_fork_layer1)
+                elif layer == 2:
+                    self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.forkcamera_parking_fork_layer2)
+                else:
+                    self.visual_servoing_action_server.get_logger().info('Layer is not defined')
+                    return
+                
+                if self.is_sequence_finished == True:
+                    current_sequence = ParkingForkCameraSequence.changing_direction.value
+                    self.is_sequence_finished = False
+            
+            elif(current_sequence == ParkingForkCameraSequence.changing_direction.value):
+                self.is_sequence_finished = self.action.fnSeqChangingDirection(self.visual_servoing_action_server.forkcamera_ChangingDirection_threshold)
+
+                if self.is_sequence_finished == True:
+                    current_sequence = ParkingForkCameraSequence.move_nearby_parking_lot.value
+                    self.is_sequence_finished = False
+            
+            elif(current_sequence == ParkingForkCameraSequence.move_nearby_parking_lot.value):
+                self.is_sequence_finished = self.action.fnSeqMovingNearbyParkingLot(self.visual_servoing_action_server.forkcamera_desired_dist_threshold)
+                
+                if self.is_sequence_finished == True:
+                    current_sequence = ParkingForkCameraSequence.parking.value
+                    self.is_sequence_finished = False
+            elif(current_sequence == ParkingForkCameraSequence.parking.value):
+                self.is_sequence_finished = self.action.fnSeqParking(self.visual_servoing_action_server.forkcamera_parking_stop)
+                
+                if self.is_sequence_finished == True:
+                    current_sequence = ParkingForkCameraSequence.changingtheta.value
+                    self.is_sequence_finished = False
+            elif(current_sequence == ParkingForkCameraSequence.changingtheta.value):
+                self.is_sequence_finished = self.action.fnSeqChangingtheta(self.visual_servoing_action_server.forkcamera_Changingtheta_threshold)
+                
+                if self.is_sequence_finished == True:
+                    current_sequence = ParkingForkCameraSequence.decide.value
+                    self.is_sequence_finished = False
+            elif(current_sequence == ParkingForkCameraSequence.decide.value):
+                self.is_sequence_finished = self.action.fnSeqdecide(self.visual_servoing_action_server.forkcamera_decide_distance)
+                
+                if self.is_sequence_finished == True:
+                    current_sequence = ParkingForkCameraSequence.stop.value
+                    self.is_sequence_finished = False
+                elif self.is_sequence_finished == False:
+                    current_sequence = ParkingForkCameraSequence.back.value
+                    self.is_sequence_finished = False
+            elif(current_sequence == ParkingForkCameraSequence.back.value):
+                self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.forkcamera_back_distance)
+                
+                if self.is_sequence_finished == True:
+                    current_sequence = ParkingForkCameraSequence.parking.value
+                    self.is_sequence_finished = False
+
+            elif(current_sequence == ParkingForkCameraSequence.stop.value):
+                return
+
+    def raise_pallet(self, goal_handle, layer):
+        current_sequence = RaisePalletSequence.init_fork.value
+
+        while not goal_handle.is_cancel_requested:
+            time.sleep(0.1)
+
+            if(current_sequence == RaisePalletSequence.init_fork.value):
+                if layer == 1:
+                    self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.forkcamera_raise_pallet_layer1)
+                elif layer == 2:
+                    self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.forkcamera_raise_pallet_layer2)
+                else:
+                    self.visual_servoing_action_server.get_logger().info('Layer is not defined')
+                    return
+                
+                if self.is_sequence_finished == True:
+                    current_sequence = RaisePalletSequence.dead_reckoning.value
+                    self.is_sequence_finished = False
+
+            if(current_sequence == RaisePalletSequence.dead_reckoning.value):
+                self.is_sequence_finished = self.action.fnseqDeadReckoning(self.visual_servoing_action_server.raise_pallet_dead_reckoning_dist)
+                
+                if self.is_sequence_finished == True:
+                    current_sequence = RaisePalletSequence.fork_updown.value
+                    self.is_sequence_finished = False
+
+            if(current_sequence == RaisePalletSequence.fork_updown.value):
+                if layer == 1:
+                    self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.raise_pallet_raise_height_layer1)
+                elif layer == 2:
+                    self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.raise_pallet_raise_height_layer2)
+                else:
+                    self.visual_servoing_action_server.get_logger().info('Layer is not defined')
+                    return
+                
+                if self.is_sequence_finished == True:
+                    current_sequence = RaisePalletSequence.back.value
+                    self.is_sequence_finished = False
+
+            if(current_sequence == RaisePalletSequence.back.value):
+                self.is_sequence_finished = self.action.fnseqDeadReckoning(self.visual_servoing_action_server.raise_pallet_back_dist)
+
+                if self.is_sequence_finished == True:
+                    return
+                
+    def drop_pallet(self, goal_handle, layer):
+        current_sequence = RaisePalletSequence.init_fork.value
+
+        while not goal_handle.is_cancel_requested:
+            time.sleep(0.1)
+
+            if(current_sequence == RaisePalletSequence.init_fork.value):
+                if layer == 1:
+                    self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.drop_pallet_fork_init_layer1)
+                elif layer == 2:
+                    self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.drop_pallet_fork_init_layer2)
+                else:
+                    self.visual_servoing_action_server.get_logger().info('Layer is not defined')
+                    return
+                
+                if self.is_sequence_finished == True:
+                    current_sequence = RaisePalletSequence.dead_reckoning.value
+                    self.is_sequence_finished = False
+
+            if(current_sequence == RaisePalletSequence.dead_reckoning.value):
+                self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_dead_reckoning_dist)
+                
+                if self.is_sequence_finished == True:
+                    current_sequence = RaisePalletSequence.fork_updown.value
+                    self.is_sequence_finished = False
+
+            if(current_sequence == RaisePalletSequence.fork_updown.value):
+                if layer == 1:
+                    self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.drop_pallet_drop_height_layer1)
+                elif layer == 2:
+                    self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.drop_pallet_drop_height_layer2)
+                else:
+                    self.visual_servoing_action_server.get_logger().info('Layer is not defined')
+                    return
+                
+                if self.is_sequence_finished == True:
+                    current_sequence = RaisePalletSequence.back.value
+                    self.is_sequence_finished = False
+
+            if(current_sequence == RaisePalletSequence.back.value):
+                self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_back_distance)
+
+                if self.is_sequence_finished == True:
+                    return
+                
+    
