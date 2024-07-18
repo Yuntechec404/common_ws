@@ -50,7 +50,8 @@ class PoseVisualization(Node):
         self.root.after(100, self.update_canvas)
 
     def update_gui(self):
-        # self.log_info()
+        #self.log_info()
+        rclpy.spin_once(self)
         self.robot_pose_label.config(text="Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
             self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
         self.marker_pose_label.config(text="Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
