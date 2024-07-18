@@ -54,7 +54,7 @@ class Action():
     def SpinOnce_fork(self):
         self.updownposition = self.TestAction.SpinOnce_fork()
 
-    def fnseqdead_reckoning(self, dead_reckoning_dist):#(使用里程紀計算)移動到離現在位置dead_reckoning_dist公尺的地方, 1.0 = 朝向marker前進1公尺, -1.0 = 朝向marker後退1公尺
+    def fnseqDeadReckoning(self, dead_reckoning_dist):#(使用里程紀計算)移動到離現在位置dead_reckoning_dist公尺的地方, 1.0 = 朝向marker前進1公尺, -1.0 = 朝向marker後退1公尺
         self.SpinOnce()
         Kp = 0.2
         threshold = 0.015
@@ -80,7 +80,7 @@ class Action():
                 self.cmd_vel.fnGoStraight(Kp, -(dead_reckoning_dist - dist))
                 return False
 
-    def fnseqmove_to_marker_dist(self, marker_dist): #(使用marker計算) 移動到距離marker_dist公尺的位置
+    def fnseqMoveToMarkerDist(self, marker_dist): #(使用marker計算) 移動到距離marker_dist公尺的位置
         self.SpinOnce()
         Kp = 0.2
         if(marker_dist < 2.0):
