@@ -243,24 +243,27 @@ class Action():
             self.cmd_vel.fnTurn(Kp, desired_angle_turn)
             if abs(desired_angle_turn) < 0.01:
                 self.cmd_vel.fnStop()
-                if self.check_wait_time > 20:
-                    self.check_wait_time = 0
-                    self.current_nearby_sequence = self.NearbySequence.initial_turn.value
-                    self.is_triggered = False
-                    return True                
-                else:
-                    self.check_wait_time =self.check_wait_time  +1
-            elif abs(desired_angle_turn) < 0.02 and self.check_wait_time:
-                self.cmd_vel.fnStop()
-                if self.check_wait_time > 20:
-                    self.check_wait_time = 0
-                    self.current_nearby_sequence = self.NearbySequence.initial_turn.value
-                    self.is_triggered = False
-                    return True                
-                else:
-                    self.check_wait_time =self.check_wait_time  +1
-            else:
-                self.check_wait_time =0    
+                return True
+            # if abs(desired_angle_turn) < 0.01:
+            #     self.cmd_vel.fnStop()
+            #     if self.check_wait_time > 20:
+            #         self.check_wait_time = 0
+            #         self.current_nearby_sequence = self.NearbySequence.initial_turn.value
+            #         self.is_triggered = False
+            #         return True                
+            #     else:
+            #         self.check_wait_time =self.check_wait_time  +1
+            # elif abs(desired_angle_turn) < 0.02 and self.check_wait_time:
+            #     self.cmd_vel.fnStop()
+            #     if self.check_wait_time > 20:
+            #         self.check_wait_time = 0
+            #         self.current_nearby_sequence = self.NearbySequence.initial_turn.value
+            #         self.is_triggered = False
+            #         return True                
+            #     else:
+            #         self.check_wait_time =self.check_wait_time  +1
+            # else:
+            #     self.check_wait_time =0    
         return False
     
     def fnSeqParking(self, parking_dist):
