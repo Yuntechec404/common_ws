@@ -4,7 +4,7 @@ from enum import Enum
 from action import Action
 import time
 import rclpy
-ParkingBodyCameraSequence = Enum( 'ParkingSequence', \
+ParkingBodyCameraSequence = Enum( 'ParkingBodyCameraSequence', \
                         'init_fork \
                         changing_direction \
                         move_nearby_parking_lot \
@@ -14,7 +14,7 @@ ParkingBodyCameraSequence = Enum( 'ParkingSequence', \
                         back \
                         stop \
                         error')
-ParkingForkCameraSequence = Enum( 'ParkingSequence', \
+ParkingForkCameraSequence = Enum( 'ParkingForkCameraSequence', \
                         'init_fork \
                         changing_direction \
                         move_nearby_parking_lot \
@@ -24,14 +24,14 @@ ParkingForkCameraSequence = Enum( 'ParkingSequence', \
                         back \
                         stop \
                         error')
-RaisePalletSequence = Enum( 'ParkingSequence', \
+RaisePalletSequence = Enum( 'RaisePalletSequence', \
                         'init_fork \
                         dead_reckoning \
                         fork_updown \
                         back \
                         stop \
                         error')
-DropPalletSequence = Enum( 'ParkingSequence', \
+DropPalletSequence = Enum( 'DropPalletSequence', \
                         'init_fork \
                         dead_reckoning \
                         fork_updown \
@@ -173,21 +173,26 @@ class ActionSequence():
 
         while not goal_handle.is_cancel_requested:
             time.sleep(0.1)
+            feedback = str(RaisePalletSequence(current_sequence))
+            self.visual_servoing_action_server.get_logger().info('Feedback: {0}'.format(feedback))
 
             if(current_sequence == RaisePalletSequence.init_fork.value):
                 if layer == 1:
-                    self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.forkcamera_raise_pallet_layer1)
+                    self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.raise_pallet_fork_init_layer1)
                 elif layer == 2:
-                    self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.forkcamera_raise_pallet_layer2)
+                    self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.raise_pallet_fork_init_layer1)
                 else:
                     self.visual_servoing_action_server.get_logger().info('Layer is not defined')
                     return
                 
                 if self.is_sequence_finished == True:
                     current_sequence = RaisePalletSequence.dead_reckoning.value
+                    feedback = str(RaisePalletSequence(current_sequence))
+                    self.visual_servoing_action_server.get_logger().info('fnseqDeadReckoning change to:{0}'.format(feedback))
                     self.is_sequence_finished = False
 
             if(current_sequence == RaisePalletSequence.dead_reckoning.value):
+                self.visual_servoing_action_server.get_logger().info('fnseqDeadReckoning: {0}'.format(self.visual_servoing_action_server.raise_pallet_dead_reckoning_dist))
                 self.is_sequence_finished = self.action.fnseqDeadReckoning(self.visual_servoing_action_server.raise_pallet_dead_reckoning_dist)
                 
                 if self.is_sequence_finished == True:
@@ -214,12 +219,12 @@ class ActionSequence():
                     return
                 
     def drop_pallet(self, goal_handle, layer):
-        current_sequence = RaisePalletSequence.init_fork.value
+        current_sequence = DropPalletSequence.init_fork.value
 
         while not goal_handle.is_cancel_requested:
             time.sleep(0.1)
 
-            if(current_sequence == RaisePalletSequence.init_fork.value):
+            if(current_sequence == DropPalletSequence.init_fork.value):
                 if layer == 1:
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.drop_pallet_fork_init_layer1)
                 elif layer == 2:
@@ -229,17 +234,17 @@ class ActionSequence():
                     return
                 
                 if self.is_sequence_finished == True:
-                    current_sequence = RaisePalletSequence.dead_reckoning.value
+                    current_sequence = DropPalletSequence.dead_reckoning.value
                     self.is_sequence_finished = False
 
-            if(current_sequence == RaisePalletSequence.dead_reckoning.value):
+            if(current_sequence == DropPalletSequence.dead_reckoning.value):
                 self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_dead_reckoning_dist)
                 
                 if self.is_sequence_finished == True:
-                    current_sequence = RaisePalletSequence.fork_updown.value
+                    current_sequence = DropPalletSequence.fork_updown.value
                     self.is_sequence_finished = False
 
-            if(current_sequence == RaisePalletSequence.fork_updown.value):
+            if(current_sequence == DropPalletSequence.fork_updown.value):
                 if layer == 1:
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.drop_pallet_drop_height_layer1)
                 elif layer == 2:
@@ -249,10 +254,10 @@ class ActionSequence():
                     return
                 
                 if self.is_sequence_finished == True:
-                    current_sequence = RaisePalletSequence.back.value
+                    current_sequence = DropPalletSequence.back.value
                     self.is_sequence_finished = False
 
-            if(current_sequence == RaisePalletSequence.back.value):
+            if(current_sequence == DropPalletSequence.back.value):
                 self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_back_distance)
 
                 if self.is_sequence_finished == True:

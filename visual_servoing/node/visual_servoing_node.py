@@ -159,8 +159,8 @@ class VisualServoingActionServer(Node):
         self.raise_pallet_raise_height_layer1 = self.get_parameter('raise_pallet_raise_height_layer1').get_parameter_value().double_value
         self.declare_parameter('raise_pallet_raise_height_layer2', 0.0)
         self.raise_pallet_raise_height_layer2 = self.get_parameter('raise_pallet_raise_height_layer2').get_parameter_value().double_value
-        self.declare_parameter('raise_pallet_back_distance', 0.0)
-        self.raise_pallet_back_distance = self.get_parameter('raise_pallet_back_distance').get_parameter_value().double_value
+        self.declare_parameter('raise_pallet_back_dist', 0.0)
+        self.raise_pallet_back_dist = self.get_parameter('raise_pallet_back_dist').get_parameter_value().double_value
         self.declare_parameter('raise_pallet_navigation_helght', 0.0)
         self.raise_pallet_navigation_helght = self.get_parameter('raise_pallet_navigation_helght').get_parameter_value().double_value
 
@@ -170,7 +170,7 @@ class VisualServoingActionServer(Node):
         self.get_logger().info("raise_pallet_dead_reckoning_dist: {}, type: {}".format(self.raise_pallet_dead_reckoning_dist, type(self.raise_pallet_dead_reckoning_dist)))
         self.get_logger().info("raise_pallet_raise_height_layer1: {}, type: {}".format(self.raise_pallet_raise_height_layer1, type(self.raise_pallet_raise_height_layer1)))
         self.get_logger().info("raise_pallet_raise_height_layer2: {}, type: {}".format(self.raise_pallet_raise_height_layer2, type(self.raise_pallet_raise_height_layer2)))
-        self.get_logger().info("raise_pallet_back_distance: {}, type: {}".format(self.raise_pallet_back_distance, type(self.raise_pallet_back_distance)))
+        self.get_logger().info("raise_pallet_back_dist: {}, type: {}".format(self.raise_pallet_back_dist, type(self.raise_pallet_back_dist)))
         self.get_logger().info("raise_pallet_navigation_helght: {}, type: {}".format(self.raise_pallet_navigation_helght, type(self.raise_pallet_navigation_helght)))
 
         # get drop_pallet parameter
@@ -270,13 +270,13 @@ class VisualServoingActionServer(Node):
         # self.get_logger().info("Pallet callback")
         try:
             if self.shelf_or_pallet == False:
-                marker_msg = msg.pose
+                marker_msg = msg
                 quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
                 theta = tf_transformations.euler_from_quaternion(quaternion)[1]
                 self.marker_2d_pose_x = -marker_msg.position.z
                 self.marker_2d_pose_y = marker_msg.position.x + self.offset_x
                 self.marker_2d_theta = -theta
-                # self.get_logger().info("Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
+                # self.get_logger().info("pallet Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
             else:
                 pass
         except:

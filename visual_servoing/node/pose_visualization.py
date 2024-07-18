@@ -34,6 +34,9 @@ class PoseVisualization(Node):
         self.marker_pose_label = tk.Label(self.root, text="Marker Pose: x=0.0, y=0.0, theta=0.0")
         self.marker_pose_label.pack()
         
+        self.pallet_pose_label = tk.Label(self.root, text="Pallet Pose: x=0.0, y=0.0, theta=0.0")
+        self.pallet_pose_label.pack()
+
         self.fork_pose_label = tk.Label(self.root, text="Fork Position: 0.0")
         self.fork_pose_label.pack()
         
@@ -47,15 +50,18 @@ class PoseVisualization(Node):
     def update_canvas(self):
         self.canvas.coords(self.robot_marker, self.robot_2d_pose_x * 50 + 250, self.robot_2d_pose_y * 50 + 250, self.robot_2d_pose_x * 50 + 260, self.robot_2d_pose_y * 50 + 260)
         self.canvas.coords(self.marker_marker, self.marker_2d_pose_x * 50 + 250, self.marker_2d_pose_y * 50 + 250, self.marker_2d_pose_x * 50 + 260, self.marker_2d_pose_y * 50 + 260)
+        self.canvas.coords(self.pallet_marker, self.pallet_2d_pose_x * 50 + 250, self.pallet_2d_pose_y * 50 + 250, self.pallet_2d_pose_x * 50 + 260, self.pallet_2d_pose_y * 50 + 260)
         self.root.after(100, self.update_canvas)
 
     def update_gui(self):
-        #self.log_info()
         rclpy.spin_once(self)
+        self.log_info()
         self.robot_pose_label.config(text="Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
             self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
         self.marker_pose_label.config(text="Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
             self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
+        self.pallet_pose_label.config(text="Pallet Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
+            self.pallet_2d_pose_x, self.pallet_2d_pose_y, self.pallet_2d_theta))
         self.fork_pose_label.config(text="Fork Position: {:.3f}".format(self.updownposition))
         self.root.after(100, self.update_gui)
 
@@ -67,11 +73,13 @@ class PoseVisualization(Node):
         self.previous_robot_2d_theta = 0.0
         self.total_robot_2d_theta = 0.0
         # AprilTag_variable
-        self.shelf_or_pallet = True   # True: apriltag, False: pallet
-        self.offset_x = 0.0
         self.marker_2d_pose_x = 0.0
         self.marker_2d_pose_y = 0.0
         self.marker_2d_theta = 0.0
+        # pallet variable
+        self.pallet_2d_pose_x = 0.0
+        self.pallet_2d_pose_y = 0.0
+        self.pallet_2d_theta = 0.0
         # Forklift_variable
         self.updownposition = 0.0      
 
@@ -99,10 +107,11 @@ class PoseVisualization(Node):
         self.forkpose_sub = self.create_subscription(Meteorcar, self.forkpose_topic, self.cbGetforkpos, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
 
     def log_info(self):
-        rclpy.spin_once(self)
+        # rclpy.spin_once(self)
         self.get_logger().info("Odom: x={}, y={}, theta={}".format(
         self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
-        self.get_logger().info("Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, (self.marker_2d_theta*180/math.pi)))
+        self.get_logger().info("AprilTag Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, (self.marker_2d_theta*180/math.pi)))
+        self.get_logger().info("Pallet Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.pallet_2d_pose_x, self.pallet_2d_pose_y, (self.pallet_2d_theta*180/math.pi)))
         self.get_logger().info("Fork position: {}".format(self.updownposition))
 
     def odom_callback(self, msg):
@@ -132,35 +141,29 @@ class PoseVisualization(Node):
     def apriltag_callback(self, msg):
         # self.get_logger().info("Shelf callback")
         try:
-            if self.shelf_or_pallet == True:
-                marker_msg = msg.poses[0]
-                quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
-                theta = tf_transformations.euler_from_quaternion(quaternion)[1]
-                self.marker_2d_pose_x = -marker_msg.position.z
-                self.marker_2d_pose_y = marker_msg.position.x + self.offset_x
-                self.marker_2d_theta = -theta
-                # self.get_logger().info("Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
-
-            else:
-                pass
+            marker_msg = msg.poses[0]
+            quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
+            theta = tf_transformations.euler_from_quaternion(quaternion)[1]
+            self.marker_2d_pose_x = -marker_msg.position.z
+            self.marker_2d_pose_y = marker_msg.position.x 
+            self.marker_2d_theta = -theta
+            self.get_logger().info("apriltag_callback Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
         except:
             pass
 
     def pallet_callback(self, msg):
         # self.get_logger().info("Pallet callback")
         try:
-            if self.shelf_or_pallet == False:
-                marker_msg = msg.pose
-                quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
-                theta = tf_transformations.euler_from_quaternion(quaternion)[1]
-                self.marker_2d_pose_x = -marker_msg.position.z
-                self.marker_2d_pose_y = marker_msg.position.x + self.offset_x
-                self.marker_2d_theta = -theta
-                # self.get_logger().info("Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
-            else:
-                pass
+            marker_msg = msg
+            quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
+            theta = tf_transformations.euler_from_quaternion(quaternion)[1]
+            self.pallet_2d_pose_x = -marker_msg.position.z
+            self.pallet_2d_pose_y = marker_msg.position.x
+            self.pallet_2d_theta = -theta
+            # self.get_logger().info("Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
         except:
             pass
+
 
     def cbGetforkpos(self, msg):
         # self.get_logger().info("cbGetforkpos")

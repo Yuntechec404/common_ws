@@ -243,6 +243,7 @@ class Action():
             self.cmd_vel.fnTurn(Kp, desired_angle_turn)
             if abs(desired_angle_turn) < 0.01:
                 self.cmd_vel.fnStop()
+                self.is_triggered = False
                 return True
             # if abs(desired_angle_turn) < 0.01:
             #     self.cmd_vel.fnStop()
@@ -294,9 +295,7 @@ class Action():
             return False
         
     def fnForkUpdown(self, desired_updownposition):#0~2.7
-        self.TestAction.get_logger().info("self.SpinOnce_fork() bedore")
         self.SpinOnce_fork()
-        self.TestAction.get_logger().info("self.SpinOnce_fork() after")
         fork_threshold = 0.001
         if(desired_updownposition < 0):
             return True
