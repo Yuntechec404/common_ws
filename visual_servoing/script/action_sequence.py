@@ -17,7 +17,6 @@ ParkingBodyCameraSequence = Enum( 'ParkingBodyCameraSequence', \
 ParkingForkCameraSequence = Enum( 'ParkingForkCameraSequence', \
                         'init_fork \
                         changing_direction \
-                        move_nearby_parking_lot \
                         parking \
                         changingtheta \
                         decide \
@@ -102,7 +101,11 @@ class ActionSequence():
 
             elif(current_sequence == ParkingBodyCameraSequence.stop.value):
                 return
-                
+            
+            else:
+                self.visual_servoing_action_server.get_logger().info('Error: {0} does not exist'.format(current_sequence))
+                return
+            
     def parking_forkcamera(self, goal_handle, layer):
         current_sequence = ParkingForkCameraSequence.init_fork.value
 
@@ -121,22 +124,9 @@ class ActionSequence():
                     return
                 
                 if self.is_sequence_finished == True:
-                    current_sequence = ParkingForkCameraSequence.changing_direction.value
-                    self.is_sequence_finished = False
-            
-            elif(current_sequence == ParkingForkCameraSequence.changing_direction.value):
-                self.is_sequence_finished = self.action.fnSeqChangingDirection(self.visual_servoing_action_server.forkcamera_ChangingDirection_threshold)
-
-                if self.is_sequence_finished == True:
-                    current_sequence = ParkingForkCameraSequence.move_nearby_parking_lot.value
-                    self.is_sequence_finished = False
-            
-            elif(current_sequence == ParkingForkCameraSequence.move_nearby_parking_lot.value):
-                self.is_sequence_finished = self.action.fnSeqMovingNearbyParkingLot(self.visual_servoing_action_server.forkcamera_desired_dist_threshold)
-                
-                if self.is_sequence_finished == True:
                     current_sequence = ParkingForkCameraSequence.parking.value
                     self.is_sequence_finished = False
+            
             elif(current_sequence == ParkingForkCameraSequence.parking.value):
                 self.is_sequence_finished = self.action.fnSeqParking(self.visual_servoing_action_server.forkcamera_parking_stop)
                 
@@ -167,6 +157,10 @@ class ActionSequence():
 
             elif(current_sequence == ParkingForkCameraSequence.stop.value):
                 return
+            
+            else:
+                self.visual_servoing_action_server.get_logger().info('Error: {0} does not exist'.format(current_sequence))
+                return
 
     def raise_pallet(self, goal_handle, layer):
         current_sequence = RaisePalletSequence.init_fork.value
@@ -191,7 +185,7 @@ class ActionSequence():
                     self.visual_servoing_action_server.get_logger().info('fnseqDeadReckoning change to:{0}'.format(feedback))
                     self.is_sequence_finished = False
 
-            if(current_sequence == RaisePalletSequence.dead_reckoning.value):
+            elif(current_sequence == RaisePalletSequence.dead_reckoning.value):
                 self.visual_servoing_action_server.get_logger().info('fnseqDeadReckoning: {0}'.format(self.visual_servoing_action_server.raise_pallet_dead_reckoning_dist))
                 self.is_sequence_finished = self.action.fnseqDeadReckoning(self.visual_servoing_action_server.raise_pallet_dead_reckoning_dist)
                 
@@ -199,7 +193,7 @@ class ActionSequence():
                     current_sequence = RaisePalletSequence.fork_updown.value
                     self.is_sequence_finished = False
 
-            if(current_sequence == RaisePalletSequence.fork_updown.value):
+            elif(current_sequence == RaisePalletSequence.fork_updown.value):
                 if layer == 1:
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.raise_pallet_raise_height_layer1)
                 elif layer == 2:
@@ -212,12 +206,15 @@ class ActionSequence():
                     current_sequence = RaisePalletSequence.back.value
                     self.is_sequence_finished = False
 
-            if(current_sequence == RaisePalletSequence.back.value):
+            elif(current_sequence == RaisePalletSequence.back.value):
                 self.is_sequence_finished = self.action.fnseqDeadReckoning(self.visual_servoing_action_server.raise_pallet_back_dist)
 
                 if self.is_sequence_finished == True:
                     return
-                
+            else:
+                self.visual_servoing_action_server.get_logger().info('Error: {0} does not exist'.format(current_sequence))
+                return
+              
     def drop_pallet(self, goal_handle, layer):
         current_sequence = DropPalletSequence.init_fork.value
 
@@ -237,14 +234,14 @@ class ActionSequence():
                     current_sequence = DropPalletSequence.dead_reckoning.value
                     self.is_sequence_finished = False
 
-            if(current_sequence == DropPalletSequence.dead_reckoning.value):
+            elif(current_sequence == DropPalletSequence.dead_reckoning.value):
                 self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_dead_reckoning_dist)
                 
                 if self.is_sequence_finished == True:
                     current_sequence = DropPalletSequence.fork_updown.value
                     self.is_sequence_finished = False
 
-            if(current_sequence == DropPalletSequence.fork_updown.value):
+            elif(current_sequence == DropPalletSequence.fork_updown.value):
                 if layer == 1:
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.drop_pallet_drop_height_layer1)
                 elif layer == 2:
@@ -257,10 +254,12 @@ class ActionSequence():
                     current_sequence = DropPalletSequence.back.value
                     self.is_sequence_finished = False
 
-            if(current_sequence == DropPalletSequence.back.value):
+            elif(current_sequence == DropPalletSequence.back.value):
                 self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_back_distance)
 
                 if self.is_sequence_finished == True:
                     return
-                
+            else:
+                self.visual_servoing_action_server.get_logger().info('Error: {0} does not exist'.format(current_sequence))
+                return
     
