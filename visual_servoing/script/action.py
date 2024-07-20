@@ -182,6 +182,7 @@ class Action():
                 # decide doing fnSeqMovingNearbyParkingLot or not
                 desired_dist = -1* self.initial_marker_pose_x * abs(math.cos((math.pi / 2.) - self.initial_marker_pose_theta))
                 if abs(desired_dist) < desired_dist_threshold:
+                    self.is_triggered = False
                     return True
             
             if self.initial_marker_pose_theta < 0.0:
