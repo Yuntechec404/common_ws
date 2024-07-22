@@ -108,7 +108,7 @@ class Action():
         # print("threshod", threshod)
         if abs(self.marker_2d_theta) < threshod  :
             self.cmd_vel.fnStop()
-            if self.check_wait_time > 10 :
+            if self.check_wait_time > 5 :
                 self.check_wait_time = 0
                 return True
             else:
@@ -268,7 +268,7 @@ class Action():
             #     self.check_wait_time =0    
         return False
     
-    def fnSeqParking(self, parking_dist):
+    def fnSeqParking(self, parking_dist, kp):
         self.SpinOnce()
         desired_angle_turn = math.atan2(self.marker_2d_pose_y - 0, self.marker_2d_pose_x - 0)
 
@@ -276,7 +276,7 @@ class Action():
             desired_angle_turn = desired_angle_turn + math.pi
         else:
             desired_angle_turn = desired_angle_turn - math.pi
-        self.cmd_vel.fnTrackMarker(desired_angle_turn)
+        self.cmd_vel.fnTrackMarker(desired_angle_turn, kp)
         if (abs(self.marker_2d_pose_x) < parking_dist)  :
             self.cmd_vel.fnStop()
             if self.check_wait_time > 10:
@@ -331,9 +331,9 @@ class cmd_vel():
         elif twist.linear.x < -0.2:
             twist.linear.x =-0.2
         if twist.linear.x > 0 and twist.linear.x < 0.02:
-            twist.linear.x =0.05
+            twist.linear.x =0.02
         elif twist.linear.x < 0 and twist.linear.x > -0.02:
-            twist.linear.x =-0.05   
+            twist.linear.x =-0.02
 
         if twist.angular.z > 0.2:
             twist.angular.z =0.2
@@ -365,10 +365,10 @@ class cmd_vel():
         fork_msg.fork_velocity = velocity
         self.pub_fork.publish(fork_msg)
 
-    def fnTrackMarker(self, theta):
-        Kp = 2.0 #6.5
+    def fnTrackMarker(self, theta, Kp):
+        # Kp = 2.0 #6.5
         twist = Twist()
-        twist.linear.x = -0.05
+        twist.linear.x = -0.025
         twist.angular.z = Kp * theta
         self.cmd_pub(twist)
 
