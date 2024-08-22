@@ -83,7 +83,7 @@ class VisualServoingActionServer(Node):
         self.pallet_topic = self.get_parameter('pallet_topic').get_parameter_value().string_value
         self.declare_parameter('forkpose_topic', '/fork_pose')
         self.forkpose_topic = self.get_parameter('forkpose_topic').get_parameter_value().string_value
-        self.declare_parameter('shelf_format', '/True')
+        self.declare_parameter('shelf_format', True)
         self.shelf_format = self.get_parameter('shelf_format').get_parameter_value().bool_value
 
         self.get_logger().info("Get subscriber topic parameter")

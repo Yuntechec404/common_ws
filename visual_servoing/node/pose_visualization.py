@@ -93,7 +93,7 @@ class PoseVisualization(Node):
         self.pallet_topic = self.get_parameter('pallet_topic').get_parameter_value().string_value
         self.declare_parameter('forkpose_topic', '/fork_pose')
         self.forkpose_topic = self.get_parameter('forkpose_topic').get_parameter_value().string_value
-        self.declare_parameter('shelf_format', '/True')
+        self.declare_parameter('shelf_format', True)
         self.shelf_format = self.get_parameter('shelf_format').get_parameter_value().bool_value
 
         self.get_logger().info("Get subscriber topic parameter")
@@ -101,6 +101,8 @@ class PoseVisualization(Node):
         self.get_logger().info("apriltag_topic: {}, type: {}".format(self.apriltag_topic, type(self.apriltag_topic)))
         self.get_logger().info("pallet_topic: {}, type: {}".format(self.pallet_topic, type(self.pallet_topic)))
         self.get_logger().info("forkpose_topic: {}, type: {}".format(self.forkpose_topic, type(self.forkpose_topic)))
+        self.get_logger().info("shelf_format: {}, type: {}".format(self.shelf_format, type(self.shelf_format)))
+
 
     def create_subscriber(self):
         self.odom_sub = self.create_subscription(Odometry, self.odom_topic, self.odom_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
