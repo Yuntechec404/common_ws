@@ -108,7 +108,7 @@ class PoseVisualization(Node):
         self.odom_sub = self.create_subscription(Odometry, self.odom_topic, self.odom_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         self.pallet_sub = self.create_subscription(Pose, self.pallet_topic, self.pallet_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         self.forkpose_sub = self.create_subscription(Meteorcar, self.forkpose_topic, self.cbGetforkpos, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
-        if(self.shelf_format):
+        if(self.shelf_format == True):
             self.apriltag_sub = self.create_subscription(PoseArray, self.apriltag_topic, self.apriltag_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         else:
             self.apriltag_sub = self.create_subscription(Pose, self.apriltag_topic, self.apriltag_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
@@ -149,22 +149,16 @@ class PoseVisualization(Node):
     def apriltag_callback(self, msg):
         # self.get_logger().info("Shelf callback")
         try:
-            if(self.shelf_format):
+            if(self.apriltag_sub.msg_type == PoseArray):
                 marker_msg = msg.poses[0]
-                quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
-                theta = tf_transformations.euler_from_quaternion(quaternion)[1]
-                self.marker_2d_pose_x = -marker_msg.position.z
-                self.marker_2d_pose_y = marker_msg.position.x 
-                self.marker_2d_theta = -theta
-                self.get_logger().info("apriltag_callback Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
             else:
                 marker_msg = msg
-                quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
-                theta = tf_transformations.euler_from_quaternion(quaternion)[1]
-                self.marker_2d_pose_x = -marker_msg.position.z
-                self.marker_2d_pose_y = marker_msg.position.x 
-                self.marker_2d_theta = -theta
-                self.get_logger().info("apriltag_callback Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
+            quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
+            theta = tf_transformations.euler_from_quaternion(quaternion)[1]
+            self.marker_2d_pose_x = -marker_msg.position.z
+            self.marker_2d_pose_y = marker_msg.position.x 
+            self.marker_2d_theta = -theta
+            self.get_logger().info("apriltag_callback Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
         except:
             pass
 

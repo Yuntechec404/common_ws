@@ -35,16 +35,16 @@ class VisualServoingActionServer(Node):
     async def execute_callback(self, goal_handle):
         self.get_logger().info('Received goal: Command={}, Layer={}'.format(goal_handle.request.command, goal_handle.request.layer))
         if(goal_handle.request.command == "parking_bodycamera"):
-            # self.shelf_or_pallet = True  # True: shelf, False: pallet
+            self.shelf_or_pallet = True  # True: shelf, False: pallet
             self.action_sequence.parking_bodycamera(goal_handle, goal_handle.request.layer)
         elif(goal_handle.request.command == "parking_forkcamera"):
-            # self.shelf_or_pallet = False  # True: shelf, False: pallet
+            self.shelf_or_pallet = False  # True: shelf, False: pallet
             self.action_sequence.parking_forkcamera(goal_handle, goal_handle.request.layer)
         elif(goal_handle.request.command == "raise_pallet"):
-            # self.shelf_or_pallet = True
+            self.shelf_or_pallet = True
             self.action_sequence.raise_pallet(goal_handle, goal_handle.request.layer)
         elif(goal_handle.request.command == "drop_pallet"):
-            # self.shelf_or_pallet = True
+            self.shelf_or_pallet = True
             self.action_sequence.drop_pallet(goal_handle, goal_handle.request.layer)
         else:
             self.get_logger().info("Unknown command")
@@ -65,7 +65,7 @@ class VisualServoingActionServer(Node):
         self.previous_robot_2d_theta = 0.0
         self.total_robot_2d_theta = 0.0
         # AprilTag_variable
-        # self.shelf_or_pallet = True   # True: shelf, False: pallet
+        self.shelf_or_pallet = True   # True: shelf, False: pallet
         self.offset_x = 0.0
         self.marker_2d_pose_x = 0.0
         self.marker_2d_pose_y = 0.0
@@ -210,7 +210,7 @@ class VisualServoingActionServer(Node):
         self.forkpose_sub = self.create_subscription(Meteorcar, self.forkpose_topic, self.cbGetforkpos, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", 1, callback_group=self.callback_group)
         self.fork_pub = self.create_publisher(Meteorcar, "/cmd_fork", 1, callback_group=self.callback_group)
-        if(self.shelf_format):
+        if(self.shelf_format == True):
             self.shelf_sub = self.create_subscription(PoseArray, self.shelf_topic, self.shelf_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         else:
             self.shelf_sub = self.create_subscription(Pose, self.shelf_topic, self.shelf_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
@@ -258,28 +258,27 @@ class VisualServoingActionServer(Node):
     def shelf_callback(self, msg):
         # self.get_logger().info("Shelf callback")
         try:
-            if self.shelf_format == True:
-                marker_msg = msg.poses[0]
+            if self.shelf_or_pallet == True:
+                if(self.shelf_sub.msg_type == PoseArray):
+                    marker_msg = msg.poses[0]
+                else:
+                    marker_msg = msg
                 quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
                 theta = tf_transformations.euler_from_quaternion(quaternion)[1]
                 self.marker_2d_pose_x = -marker_msg.position.z
                 self.marker_2d_pose_y = marker_msg.position.x + self.offset_x
                 self.marker_2d_theta = -theta
                 # self.get_logger().info("Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
+
             else:
-                marker_msg = msg
-                quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
-                theta = tf_transformations.euler_from_quaternion(quaternion)[1]
-                self.marker_2d_pose_x = -marker_msg.position.z
-                self.marker_2d_pose_y = marker_msg.position.x + self.offset_x
-                self.marker_2d_theta = -theta
+                pass
         except:
             pass
 
     def pallet_callback(self, msg):
         # self.get_logger().info("Pallet callback")
         try:
-            # if self.shelf_format == False:
+            if self.shelf_or_pallet == False:
                 marker_msg = msg
                 quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
                 theta = tf_transformations.euler_from_quaternion(quaternion)[1]
@@ -287,8 +286,8 @@ class VisualServoingActionServer(Node):
                 self.marker_2d_pose_y = marker_msg.position.x + self.offset_x
                 self.marker_2d_theta = -theta
                 # self.get_logger().info("pallet Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
-            # else:
-            #     pass
+            else:
+                pass
         except:
             pass
 

@@ -6,7 +6,7 @@
     <param name="pallet_topic" value="/pallet" /><!--牙叉相機對位棧板 Topic/-->
     <param name="forkpose_topic" value="/forklift_pose" /><!--牙叉編碼器 Topic/-->
     <param name="shelf_format" value="True" /><!--貨架的格式 (True: AprilTag, False: megapose)/-->
-
+    
     <!--bodycamera parking parameter setting-->
     <param name="bodycamera_tag_offset_x"  value = "0.0" /><!--對位目標點與tag的左右偏移量(有時候相機並不會正對著tag), TODO 此功能在本版本中尚未實現/-->
     <param name="bodycamera_parking_fork_init"  value = "0.22" /><!--車體相機對位初始牙叉高度, 負值代表牙叉維持原本高度-->
