@@ -26,7 +26,7 @@ class CtrlServer(Node):
         for cmd in self.command:
             action_type = cmd[0]
             action_name = cmd[1]
-            action_param = cmd[2]
+            action_param = int(cmd[2])
 
             if action_type == 'PBVS':
                 self.get_logger().info(f"Executing PBVS Action: {action_name} with layer {action_param}")
@@ -48,20 +48,63 @@ class CtrlServer(Node):
         result = self.pbvs_client.get_result()
         self.get_logger().info(f"PBVS Action result: {result}")
 
-    def execute_odom_action(self, action, param):
-        twist = Twist()
-        # if action == 'front':
-        #      = param
-        # elif action == 'turn':
-        #      = param
-        # else:
-        #     self.get_logger().error(f"Invalid odom action: {action}")
-        #     return
+    def cmd_pub(self, twist): #限制速度的範圍
+        if twist.linear.x > 0.2:
+            twist.linear.x =0.2
+        elif twist.linear.x < -0.2:
+            twist.linear.x =-0.2
+        if twist.linear.x > 0 and twist.linear.x < 0.02:
+            twist.linear.x =0.02
+        elif twist.linear.x < 0 and twist.linear.x > -0.02:
+            twist.linear.x =-0.02
+
+        if twist.angular.z > 0.2:
+            twist.angular.z =0.2
+        elif twist.angular.z < -0.2:
+            twist.angular.z =-0.2                     
+        if twist.angular.z > 0 and twist.angular.z < 0.05:
+            twist.angular.z =0.05
+        elif twist.angular.z < 0 and twist.angular.z > -0.05:
+            twist.angular.z =-0.05
         
-        # # 發布 Twist 消息
-        # cmd_pub = self.create_publisher(Twist, 'cmd_vel', 10)
-        # cmd_pub.publish(twist)
-        # self.get_logger().info(f"Odom Action executed: {action} with param {param}")
+        self.pub_cmd_vel.publish(twist)
+
+    def execute_odom_action(self, action, param): 
+        if action == 'front':
+            self.fnGoStraight(param, 0.1, 0.15)
+        elif action == 'back':
+            self.fnGoStraight(-param, 0.1, 0.15)
+        elif action == 'turn_right':
+            self.fnTurn(param, 0.1, 0.15)
+        elif action == 'turn_left':
+            self.fnTurn(-param, 0.1, 0.15)    
+        else:
+            self.get_logger().error(f"Invalid odom action: {action}")
+            return
+
+    def fnTurn(self, target_angle, Kp=0.2, theta=0.):
+        twist = Twist()
+        twist.angular.z = Kp * theta
+        target_angle_rad = math.radians(target_angle)   # 計算目標角度（弧度）
+        time_needed = target_angle_rad / (Kp * theta)   # 計算所需的行駛時間
+        start_time = self.get_clock().now().to_msg().sec    # 記錄開始的時間
+        while (self.get_clock().now().to_msg().sec - start_time) < time_needed:
+            self.cmd_pub(twist)
+            time.sleep(0.1)  # 每 0.1 秒發送一次指令
+        twist.angular.z = 0.0   # 停止機器人
+        self.cmd_pub(twist)
+
+    def fnGoStraight(self, distance, Kp=0.2, v=0.):
+        twist = Twist()
+        twist.linear.x = Kp * v
+        time_needed = distance / (Kp * v)   # 計算所需的行駛時間
+        start_time = self.get_clock().now().to_msg().sec    # 獲取當前時間
+        # 開始移動
+        while (self.get_clock().now().to_msg().sec - start_time) < time_needed:
+            self.cmd_pub(twist)
+            time.sleep(0.1)  # 每 0.1 秒發送一次指令
+        twist.linear.x = 0.0    # 停止機器人
+        self.cmd_pub(twist)
 
 def main(args=None):
     rclpy.init(args=args)
