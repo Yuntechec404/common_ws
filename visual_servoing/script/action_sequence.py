@@ -62,6 +62,7 @@ class ActionSequence():
                 self.is_sequence_finished = self.action.fnSeqChangingDirection(self.visual_servoing_action_server.bodycamera_ChangingDirection_threshold)
 
                 if self.is_sequence_finished == True:
+                    time.sleep(5)       # yolo 偵測延時
                     current_sequence = ParkingBodyCameraSequence.move_nearby_parking_lot.value
                     self.is_sequence_finished = False
             
@@ -72,7 +73,7 @@ class ActionSequence():
                     current_sequence = ParkingBodyCameraSequence.parking.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingBodyCameraSequence.parking.value):
-                self.is_sequence_finished = self.action.fnSeqParking(self.visual_servoing_action_server.bodycamera_parking_stop, 2.0)
+                self.is_sequence_finished = self.action.fnSeqParking(self.visual_servoing_action_server.bodycamera_parking_stop, 1.0)
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingBodyCameraSequence.changingtheta.value
