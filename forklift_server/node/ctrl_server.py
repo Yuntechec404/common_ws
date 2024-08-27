@@ -50,27 +50,18 @@ class CtrlServer(Node):
 
     def execute_odom_action(self, action, param):
         twist = Twist()
-        if action == 'front':
-            twist.linear.x = param
-        elif action == 'turn':
-            twist.angular.z = param
-        else:
-            self.get_logger().error(f"Invalid odom action: {action}")
-            return
+        # if action == 'front':
+        #      = param
+        # elif action == 'turn':
+        #      = param
+        # else:
+        #     self.get_logger().error(f"Invalid odom action: {action}")
+        #     return
         
-        # 發布 Twist 消息
-        cmd_pub = self.create_publisher(Twist, 'cmd_vel', 10)
-        cmd_pub.publish(twist)
-        self.get_logger().info(f"Odom Action executed: {action} with param {param}")
-
-    def rotate_90_degrees(self):
-        twist = Twist()
-        twist.angular.z = 1.0   # 設定角速度 (1 弧度每秒)
-        self.publisher.publish(twist)
-        time_to_rotate = math.pi / 2    # 計算旋轉 90 度所需的時間 (π/2 弧度)
-        time.sleep(time_to_rotate)  # 等待時間達到
-        twist.angular.z = 0.0   # 停止旋轉
-        self.publisher.publish(twist)
+        # # 發布 Twist 消息
+        # cmd_pub = self.create_publisher(Twist, 'cmd_vel', 10)
+        # cmd_pub.publish(twist)
+        # self.get_logger().info(f"Odom Action executed: {action} with param {param}")
 
 def main(args=None):
     rclpy.init(args=args)
