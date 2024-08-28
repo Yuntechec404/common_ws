@@ -1,0 +1,16 @@
+/**:
+  ros__parameters:
+    command_list: 
+      # ["odom", "front", "3"],
+      # ["odom", "turn_right", "90"],
+      ["PBVS", "parking_forkcamera", "2"],
+      ["PBVS", "raise_pallet", "2"],
+      # ["odom", "back", "0.5"],
+      # ["odom", "turn_right", "90"],
+      # ["odom", "front", "0.5"],
+      # ["odom", "turn_left", "90"],
+      ["PBVS", "parking_bodycamera", "2"],
+      ["PBVS", "drop_pallet", "2"]
+
+      # command [PBVS, parking_forkcamera/parking_bodycamera/raise_pallet/drop_pallet , layer]
+      # command [odom, front/back/turn_left/turn_right , meter/degree]

@@ -11,11 +11,15 @@ import time
 class CtrlServer(Node):
 
     def __init__(self):
-        super().__init__('ctrl_server')
-        self.get_logger().warn(self.get_name() + " start")
-        # 讀取命令列表參數
-        self.declare_parameter('command', [])
-        self.command = self.get_parameter('command').get_parameter_value().string_array_value
+        super().__init__("ctrl_server")
+        
+        # 讀取 YAML 中的參數
+        self.declare_parameter('command_list', [])
+        self.command = self.get_parameter('command_list').get_parameter_value().string_array_value
+        # 將命令轉換為適當的格式（YAML是作為字符串存儲的）
+        self.command = [cmd.split(", ") for cmd in self.command]
+        self.get_logger().warn(f"{self.get_name()} start with commands: {self.command}")
+        
         # 初始化動作客戶端
         self.pbvs_client = ActionClient(self, VisualServoing, 'VisualServoing')
         self.pbvs_client.wait_for_server()
