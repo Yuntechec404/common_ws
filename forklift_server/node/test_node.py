@@ -24,19 +24,18 @@ class TestYAMLParams(Node):
         int_number = self.get_parameter('int_number').get_parameter_value().integer_value
         float_number = self.get_parameter('float_number').get_parameter_value().double_value
         str_text = self.get_parameter('str_text').get_parameter_value().string_value
-        command_list = self.get_parameter('command_list').get_parameter_value().string_value
 
         self.get_logger().info(f"bool_value: {bool_value}")
         self.get_logger().info(f"int_number: {int_number}")
         self.get_logger().info(f"float_number: {float_number}")
         self.get_logger().info(f"str_text: {str_text}")
-        self.get_logger().info(f"str_text: {command_list}")
 
         # 如果您需要獲取陣列參數
         bool_array = self.get_parameter('bool_array').get_parameter_value().bool_array_value
         int_array = self.get_parameter('int_array').get_parameter_value().integer_array_value
         float_array = self.get_parameter('float_array').get_parameter_value().double_array_value
         str_array = self.get_parameter('str_array').get_parameter_value().string_array_value
+        command_list = self.get_parameter('command_list').get_parameter_value().string_array_value
 
         self.get_logger().info(f"bool_array: {bool_array}")
         self.get_logger().info(f"int_array: {int_array}")
@@ -47,15 +46,10 @@ class TestYAMLParams(Node):
         nested_param = self.get_parameter('nested_param.another_int').get_parameter_value().integer_value
         self.get_logger().info(f"nested_param.another_int: {nested_param}")
 
-        command_arr = self.string_split(command_list)
+        # 轉換為二維清單
+        self.two_dimensional_list = [cmd.split(',') for cmd in command_list]
+        self.get_logger().info(f"two_dimensional_list: {self.two_dimensional_list}")
     
-    def string_split(self,str = ""):
-        ans = str.split(';')
-        for cmd in ans:
-            self.get_logger().info(f"ans: {cmd}")
-        return ans
-        
-
 def main(args=None):
     rclpy.init(args=args)
     node = TestYAMLParams()

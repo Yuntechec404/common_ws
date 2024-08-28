@@ -14,28 +14,22 @@ class CtrlServer(Node):
         super().__init__("ctrl_server")
 
         # 宣告參數
-        self.declare_parameter('command_list')
+        self.declare_parameter('command_list_yaml')
         # 獲取參數
-        command_list = self.get_parameter('command_list').get_parameter_value().string_value
-        self.command = self.string_split(command_list)
+        command_list_yaml = self.get_parameter('command_list_yaml').get_parameter_value().string_array_value
+        # 轉換為二維清單
+        self.command_2d = [cmd.split(',') for cmd in command_list_yaml]
+        self.get_logger().info(f"command_2d: {self.command_2d}")
 
         # 初始化動作客戶端
         self.pbvs_client = ActionClient(self, VisualServoing, 'VisualServoing')
         self.pbvs_client.wait_for_server()
         
-        for item in self.command:
-            cmd = item.split(',')
-            # 訂閱命令列表
-            self.execute_commands(cmd)
+        # 訂閱命令列表
+        self.execute_commands()
 
-    def string_split(self,str = ""):
-        ans = str.split(';')
-        for cmd in ans:
-            self.get_logger().info(f"command_list: {cmd}")
-        return ans
-
-    def execute_commands(self,command=""):
-        for cmd in command:
+    def execute_commands(self):
+        for cmd in self.command_2d:
             action_type = cmd[0]
             action_name = cmd[1]
             action_param = int(cmd[2])

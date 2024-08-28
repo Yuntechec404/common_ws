@@ -1,9 +1,9 @@
 /**:
   ros__parameters:
-    command_list: "[PBVS, parking_forkcamera, 2]
-    ;[PBVS, raise_pallet, 2]
-    ;[PBVS, parking_bodycamera, 2]
-    ;[PBVS, drop_pallet, 2]"
+    command_list_yaml: ['PBVS,parking_forkcamera,2',
+    'PBVS,raise_pallet,2',
+    'PBVS,parking_bodycamera,2',
+    'PBVS,drop_pallet,2']
 
     # command [PBVS, parking_forkcamera/parking_bodycamera/raise_pallet/drop_pallet , layer]
     # command [odom, front/back/turn_left/turn_right , meter/degree]

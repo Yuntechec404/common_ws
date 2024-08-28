@@ -9,9 +9,7 @@ py_test:
     float_array: [7.5, 400.4]
     str_array: ['Nice', 'more', 'params']
     bytes_array: [0x01, 0xF1, 0xA2]
-    command_list: "[PBVS, parking_forkcamera, 2]
-    ;[PBVS, raise_pallet, 2]
-    ;[PBVS, parking_bodycamera, 2]
-    ;[PBVS, drop_pallet, 2]"
+    command_list: ['PBVS,parking_forkcamera,2',
+    'PBVS,raise_pallet,2']
     nested_param:
       another_int: 7
