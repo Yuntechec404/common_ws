@@ -7,13 +7,13 @@ def generate_launch_description():
     param = os.path.join(
         get_package_share_directory('forklift_server'),
         'param',
-        'parameter.yaml'
+        'test.yaml'
     )
         
     node = Node(
         package='forklift_server',
-        executable='ctrl_server.py',
-        name='ctrl_server',
+        executable='test_node.py',
+        name='py_test',  # 這裡的名字應該與您的 `Node` 類名一致
         parameters=[param]
     )
 

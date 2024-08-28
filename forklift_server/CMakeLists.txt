@@ -23,6 +23,7 @@ find_package(tf2 REQUIRED)
 
 install(PROGRAMS
   node/ctrl_server.py
+  node/test_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

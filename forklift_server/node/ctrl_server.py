@@ -12,22 +12,30 @@ class CtrlServer(Node):
 
     def __init__(self):
         super().__init__("ctrl_server")
-        
-        # 讀取 YAML 中的參數
-        self.declare_parameter('command_list', [])
-        self.command = self.get_parameter('command_list').get_parameter_value().string_array_value
-        # 將命令轉換為適當的格式（YAML是作為字符串存儲的）
-        self.command = [cmd.split(", ") for cmd in self.command]
-        self.get_logger().warn(f"{self.get_name()} start with commands: {self.command}")
-        
+
+        # 宣告參數
+        self.declare_parameter('command_list')
+        # 獲取參數
+        command_list = self.get_parameter('command_list').get_parameter_value().string_value
+        self.command = self.string_split(command_list)
+
         # 初始化動作客戶端
         self.pbvs_client = ActionClient(self, VisualServoing, 'VisualServoing')
         self.pbvs_client.wait_for_server()
-        # 訂閱命令列表
-        self.execute_commands()
+        
+        for item in self.command:
+            cmd = item.split(',')
+            # 訂閱命令列表
+            self.execute_commands(cmd)
 
-    def execute_commands(self):
-        for cmd in self.command:
+    def string_split(self,str = ""):
+        ans = str.split(';')
+        for cmd in ans:
+            self.get_logger().info(f"command_list: {cmd}")
+        return ans
+
+    def execute_commands(self,command=""):
+        for cmd in command:
             action_type = cmd[0]
             action_name = cmd[1]
             action_param = int(cmd[2])
