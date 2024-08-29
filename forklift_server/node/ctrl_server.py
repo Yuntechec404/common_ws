@@ -35,27 +35,26 @@ class CtrlServer(Node):
     def execute_next_command(self):
         if self.current_command_index < len(self.command_2d):
             cmd = self.command_2d[self.current_command_index]
-            for cmd in self.command_2d:
-                action_type = cmd[0]
-                action_name = cmd[1]
-                action_param = int(cmd[2])
+            action_type = cmd[0]
+            action_name = cmd[1]
+            action_param = int(cmd[2])
 
-                if action_type == 'PBVS':
-                    self.get_logger().info(f"Executing PBVS Action: {action_name} with layer {action_param}")
-                    self.execute_pbvs_action(action_name, action_param)
-                
-                elif action_type == 'odom':
-                    self.get_logger().info(f"Executing Odom Action: {action_name} with param {action_param}")
-                    self.execute_odom_action(action_name, action_param)
-                
-                else:
-                    self.get_logger().error(f"Unknown command: {cmd}")
+            if action_type == 'PBVS':
+                self.get_logger().info(f"Executing PBVS Action: {action_name} with layer {action_param}")
+                self.execute_pbvs_action(action_name, action_param)
+            
+            elif action_type == 'odom':
+                self.get_logger().info(f"Executing Odom Action: {action_name} with param {action_param}")
+                self.execute_odom_action(action_name, action_param)
+            
+            else:
+                self.get_logger().error(f"Unknown command: {cmd}")
 
     def execute_pbvs_action(self, command, layer):
         goal_msg = VisualServoing.Goal()
         goal_msg.command = command
         goal_msg.layer = layer
-        send_goal_future = self.pbvs_client.send_goal_async(goal_msg)   # 發送目標並非同步處理結果
+        send_goal_future = self.pbvs_client.send_goal_async(goal_msg)
         send_goal_future.add_done_callback(self.goal_response_callback)
 
     def goal_response_callback(self, future):
@@ -70,6 +69,11 @@ class CtrlServer(Node):
 
     def get_result_callback(self, future):
         result = future.result().result
+
+        while(result.result != "success"):  # 等待動作完成
+            time.sleep(0.1)                 # 避免佔用過多CPU
+            result = future.result().result
+
         self.get_logger().info(f'PBVS Action result: {result.result}')
         self.current_command_index += 1 # 移到下一個動作
         self.execute_next_command()
