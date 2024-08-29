@@ -19,7 +19,7 @@ class CtrlServer(Node):
         command_list_yaml = self.get_parameter('command_list_yaml').get_parameter_value().string_array_value
         # 轉換為二維清單
         self.command_2d = [cmd.split(',') for cmd in command_list_yaml]
-        self.get_logger().info(f"command_2d: {self.command_2d}")
+        self.get_logger().info(f"command_2d: {self.command_2d}{type(self.command_2d)}")
 
         # 初始化動作客戶端
         self.pbvs_client = ActionClient(self, VisualServoing, 'VisualServoing')
@@ -49,9 +49,25 @@ class CtrlServer(Node):
         goal_msg = VisualServoing.Goal()
         goal_msg.command = command
         goal_msg.layer = layer
-        self.pbvs_client.send_goal(goal_msg)
-        self.pbvs_client.wait_for_result()
-        result = self.pbvs_client.get_result()
+        # self.pbvs_client.send_goal(goal_msg)
+        # self.pbvs_client.wait_for_result()
+        # result = self.pbvs_client.get_result()
+        # self.get_logger().info(f"PBVS Action result: {result}")
+        future = self.pbvs_client.send_goal_async(goal_msg)
+        future.add_done_callback(self.goal_response_callback)
+
+    def goal_response_callback(self, future):
+        goal_handle = future.result()
+        if not goal_handle.accepted:
+            self.get_logger().info('Goal rejected.')
+            return
+
+        self.get_logger().info('Goal accepted, waiting for result...')
+        result_future = goal_handle.get_result_async()
+        result_future.add_done_callback(self.get_result_callback)
+
+    def get_result_callback(self, future):
+        result = future.result().result
         self.get_logger().info(f"PBVS Action result: {result}")
 
     def cmd_pub(self, twist): #限制速度的範圍

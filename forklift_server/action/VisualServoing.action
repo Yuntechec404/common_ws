@@ -1,0 +1,9 @@
+#goal definition
+string command
+int64 layer
+---
+#result definition
+string result
+---
+#feedback
+string feedback

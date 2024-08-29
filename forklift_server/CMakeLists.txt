@@ -20,6 +20,11 @@ find_package(tf2 REQUIRED)
 
 
 # message
+find_package(rosidl_default_generators REQUIRED)
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "action/VisualServoing.action"
+  DEPENDENCIES std_msgs
+)
 
 install(PROGRAMS
   node/ctrl_server.py
