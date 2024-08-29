@@ -29,46 +29,50 @@ class CtrlServer(Node):
         self.execute_commands()
 
     def execute_commands(self):
-        for cmd in self.command_2d:
-            action_type = cmd[0]
-            action_name = cmd[1]
-            action_param = int(cmd[2])
+        self.current_command_index = 0
+        self.execute_next_command()
 
-            if action_type == 'PBVS':
-                self.get_logger().info(f"Executing PBVS Action: {action_name} with layer {action_param}")
-                self.execute_pbvs_action(action_name, action_param)
-            
-            elif action_type == 'odom':
-                self.get_logger().info(f"Executing Odom Action: {action_name} with param {action_param}")
-                self.execute_odom_action(action_name, action_param)
-            
-            else:
-                self.get_logger().error(f"Unknown command: {cmd}")
+    def execute_next_command(self):
+        if self.current_command_index < len(self.command_2d):
+            cmd = self.command_2d[self.current_command_index]
+            for cmd in self.command_2d:
+                action_type = cmd[0]
+                action_name = cmd[1]
+                action_param = int(cmd[2])
+
+                if action_type == 'PBVS':
+                    self.get_logger().info(f"Executing PBVS Action: {action_name} with layer {action_param}")
+                    self.execute_pbvs_action(action_name, action_param)
+                
+                elif action_type == 'odom':
+                    self.get_logger().info(f"Executing Odom Action: {action_name} with param {action_param}")
+                    self.execute_odom_action(action_name, action_param)
+                
+                else:
+                    self.get_logger().error(f"Unknown command: {cmd}")
 
     def execute_pbvs_action(self, command, layer):
         goal_msg = VisualServoing.Goal()
         goal_msg.command = command
         goal_msg.layer = layer
-        # self.pbvs_client.send_goal(goal_msg)
-        # self.pbvs_client.wait_for_result()
-        # result = self.pbvs_client.get_result()
-        # self.get_logger().info(f"PBVS Action result: {result}")
-        future = self.pbvs_client.send_goal_async(goal_msg)
-        future.add_done_callback(self.goal_response_callback)
+        send_goal_future = self.pbvs_client.send_goal_async(goal_msg)   # 發送目標並非同步處理結果
+        send_goal_future.add_done_callback(self.goal_response_callback)
 
     def goal_response_callback(self, future):
         goal_handle = future.result()
         if not goal_handle.accepted:
-            self.get_logger().info('Goal rejected.')
+            self.get_logger().info('Goal rejected')
             return
 
-        self.get_logger().info('Goal accepted, waiting for result...')
+        self.get_logger().info('Goal accepted')
         result_future = goal_handle.get_result_async()
         result_future.add_done_callback(self.get_result_callback)
 
     def get_result_callback(self, future):
         result = future.result().result
-        self.get_logger().info(f"PBVS Action result: {result}")
+        self.get_logger().info(f'PBVS Action result: {result.result}')
+        self.current_command_index += 1 # 移到下一個動作
+        self.execute_next_command()
 
     def cmd_pub(self, twist): #限制速度的範圍
         if twist.linear.x > 0.2:
