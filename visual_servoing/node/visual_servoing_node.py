@@ -46,6 +46,12 @@ class VisualServoingActionServer(Node):
         elif(goal_handle.request.command == "drop_pallet"):
             self.shelf_or_pallet = True
             self.action_sequence.drop_pallet(goal_handle, goal_handle.request.layer)
+        elif(goal_handle.request.command == "odom_front"):
+            self.shelf_or_pallet = True
+            self.action_sequence.odom_front(goal_handle, goal_handle.request.layer)
+        elif(goal_handle.request.command == "odom_turn"):
+            self.shelf_or_pallet = True
+            self.action_sequence.odom_turn(goal_handle, goal_handle.request.layer)
         else:
             self.get_logger().info("Unknown command")
             goal_handle.abort()
