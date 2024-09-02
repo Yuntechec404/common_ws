@@ -1,6 +1,7 @@
 #goal definition
 string command
 int64 layer
+float32 dist
 ---
 #result definition
 string result

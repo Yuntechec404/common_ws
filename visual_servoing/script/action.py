@@ -54,31 +54,23 @@ class Action():
     def SpinOnce_fork(self):
         self.updownposition = self.TestAction.SpinOnce_fork()
 
-    def fnRotateToRelativeAngle(self, relative_angle, threshold):
-        '''
-        使機器人相對當前方向旋轉指定的角度。
-        relative_angle: 要旋轉的相對角度。
-        threshold: 設定的角度誤差範圍，當小於該值時停止旋轉。
-        return: 如果達到目標角度返回 True，否則返回 False。
-        '''
-        current_angle = math.atan2(self.robot_2d_pose_y, self.robot_2d_pose_x)  # 計算目標角度
-        target_angle = current_angle + math.radians(relative_angle)
-        target_angle = (target_angle + math.pi) % (2 * math.pi) - math.pi   # 將目標角度限制在 [-π, π] 範圍內
-        angle_diff = target_angle - current_angle   # 計算需要旋轉的角度差
+    def fnRotateToRelativeLine(self, distance, Kp=0.2, v=0.):
+        time_needed = distance / (Kp * v)   # 計算所需的行駛時間
+        start_time = self.get_clock().now().to_msg().sec    # 獲取當前時間
+        # 開始移動
+        while (self.get_clock().now().to_msg().sec - start_time) < time_needed:
+            self.cmd_vel.fnGoStraight(Kp,v)
+            time.sleep(0.1)  # 每 0.1 秒發送一次指令
+        self.cmd_vel.fnStop()   # 停止機器人
 
-        if abs(angle_diff) < threshold:     # 如果角度差在允許範圍內，則停止
-            self.cmd_vel.fnStop()
-            if self.check_wait_time > 10:
-                self.check_wait_time = 0
-                return True
-            else:
-                self.check_wait_time += 1
-                return False
-        else:   # 不在範圍內，繼續轉向
-            self.check_wait_time = 0
-            Kp = 0.2
-            self.cmd_vel.fnTurn(Kp, target_angle)
-            return False
+    def fnRotateToRelativeAngle(self, target_angle, Kp=0.2, theta=0.):
+        target_angle_rad = math.radians(target_angle)   # 計算目標角度（弧度）
+        time_needed = target_angle_rad / (Kp * theta)   # 計算所需的行駛時間
+        start_time = self.get_clock().now().to_msg().sec    # 記錄開始的時間
+        while (self.get_clock().now().to_msg().sec - start_time) < time_needed:
+            self.cmd_vel.fnTurn(Kp,theta)
+            time.sleep(0.1)  # 每 0.1 秒發送一次指令
+        self.cmd_vel.fnStop()   # 停止機器人
         
     def fnseqDeadReckoning(self, dead_reckoning_dist):#(使用里程紀計算)移動到離現在位置dead_reckoning_dist公尺的地方, 1.0 = 朝向marker前進1公尺, -1.0 = 朝向marker後退1公尺
         self.SpinOnce()
@@ -106,23 +98,21 @@ class Action():
                 self.cmd_vel.fnGoStraight(Kp, -(dead_reckoning_dist - dist))
                 return False
 
-    def fnseqMoveToMarkerDist(self, goal_dist,reference_object): #移動到距離goal_dist公尺的位置(reference_object=true 使用marker計算;reference_object=false 使用robot計算)
+    def fnseqMoveToMarkerDist(self, marker_dist): #(使用marker計算) 移動到距離marker_dist公尺的位置
         self.SpinOnce()
         Kp = 0.2
-        if(goal_dist < 2.0):
+        if(marker_dist < 2.0):
             threshold = 0.015
         else:
             threshold = 0.03
-        if(reference_object == True):
-            actual_dist = math.sqrt(self.marker_2d_pose_x**2 + self.marker_2d_pose_y**2)
-        else:
-            actual_dist = math.sqrt(self.robot_2d_pose_x**2 + self.robot_2d_pose_y**2)
 
-        if actual_dist < (goal_dist - threshold):
-            self.cmd_vel.fnGoStraight(Kp, goal_dist - actual_dist)
+        dist = math.sqrt(self.marker_2d_pose_x**2 + self.marker_2d_pose_y**2)
+        
+        if dist < (marker_dist-threshold):
+            self.cmd_vel.fnGoStraight(Kp, marker_dist - dist)
             return False
-        elif actual_dist > (goal_dist+threshold):
-            self.cmd_vel.fnGoStraight(Kp, goal_dist - actual_dist)
+        elif dist > (marker_dist+threshold):
+            self.cmd_vel.fnGoStraight(Kp, marker_dist - dist)
             return False
         else:
             self.cmd_vel.fnStop()

@@ -41,19 +41,22 @@ class CtrlServer(Node):
             if action_type == 'PBVS':
                 action_param = int(cmd[2])
                 self.get_logger().info(f"Executing {action_type} Action: {action_name} with layer {action_param}")
-                self.execute_action(action_name, action_param)
+                self.execute_action(action_name, action_param,action_type)
             elif action_type == 'odom':
                 action_param = float(cmd[2])
                 self.get_logger().info(f"Executing {action_type} Action: {action_name} with layer {action_param}")
-                self.execute_action(action_name, action_param)
+                self.execute_action(action_name, action_param,action_type)
             
             else:
                 self.get_logger().error(f"Unknown command: {cmd}")
 
-    def execute_action(self, command, layer):
+    def execute_action(self, command, parma,action_type):
         goal_msg = VisualServoing.Goal()
         goal_msg.command = command
-        goal_msg.layer = layer
+        if action_type == 'PBVS':
+            goal_msg.layer = parma
+        elif action_type == 'odom':
+            goal_msg.dist = parma
         send_goal_future = self.pbvs_client.send_goal_async(goal_msg)
         send_goal_future.add_done_callback(self.goal_response_callback)
 
@@ -69,10 +72,6 @@ class CtrlServer(Node):
 
     def get_result_callback(self, future):
         result = future.result().result
-
-        while(result.result != "success"):  # 等待動作完成
-            time.sleep(0.1)                 # 避免佔用過多CPU
-            result = future.result().result
 
         self.get_logger().info(f'PBVS Action result: {result.result}')
         self.current_command_index += 1 # 移到下一個動作

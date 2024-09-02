@@ -102,7 +102,7 @@ class ActionSequence():
                     current_sequence = ParkingBodyCameraSequence.back.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingBodyCameraSequence.back.value):
-                self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.bodycamera_back_distance,True)
+                self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.bodycamera_back_distance)
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingBodyCameraSequence.parking.value
@@ -158,7 +158,7 @@ class ActionSequence():
                     current_sequence = ParkingForkCameraSequence.back.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingForkCameraSequence.back.value):
-                self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.forkcamera_back_distance,True)
+                self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.forkcamera_back_distance)
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingForkCameraSequence.parking.value
@@ -244,7 +244,7 @@ class ActionSequence():
                     self.is_sequence_finished = False
 
             elif(current_sequence == DropPalletSequence.dead_reckoning.value):
-                self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_dead_reckoning_dist,True)
+                self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_dead_reckoning_dist)
                 
                 if self.is_sequence_finished == True:
                     current_sequence = DropPalletSequence.fork_updown.value
@@ -264,7 +264,7 @@ class ActionSequence():
                     self.is_sequence_finished = False
 
             elif(current_sequence == DropPalletSequence.back.value):
-                self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_back_distance,True)
+                self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_back_distance)
 
                 if self.is_sequence_finished == True:
                     return
@@ -272,14 +272,14 @@ class ActionSequence():
                 self.visual_servoing_action_server.get_logger().info('Error: {0} does not exist'.format(current_sequence))
                 return
     
-    def odom_front(self, goal_handle, layer):
+    def odom_front(self, goal_handle, dist):
         current_sequence = FrontSequence.Front.value
 
         while not goal_handle.is_cancel_requested:
             time.sleep(0.1)
 
             if(current_sequence == FrontSequence.Front.value):
-                self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(layer,False)
+                self.is_sequence_finished = self.action.fnRotateToRelativeLine(dist,0.1, 0.15)
 
                 if self.is_sequence_finished == True:
                     return
@@ -287,14 +287,14 @@ class ActionSequence():
                 self.visual_servoing_action_server.get_logger().info('Error: {0} does not exist'.format(current_sequence))
                 return
             
-    def odom_turn(self, goal_handle, layer):
+    def odom_turn(self, goal_handle, dist):
         current_sequence = TurnSequence.Turn.value
 
         while not goal_handle.is_cancel_requested:
             time.sleep(0.1)
 
             if(current_sequence == TurnSequence.Turn.value):
-                self.is_sequence_finished = self.action.fnRotateToRelativeAngle(layer,0.1)
+                self.is_sequence_finished = self.action.fnRotateToRelativeAngle(dist,0.1, 0.15)
 
                 if self.is_sequence_finished == True:
                     return
