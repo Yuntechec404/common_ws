@@ -14,6 +14,7 @@ from rclpy.node import Node
 from enum import Enum
 import time
 import statistics
+from rclpy.clock import Clock
 def fnCalcDistPoints(x1, x2, y1, y2):
     return math.sqrt((x1 - x2) ** 2. + (y1 - y2) ** 2.)
 
@@ -54,23 +55,27 @@ class Action():
     def SpinOnce_fork(self):
         self.updownposition = self.TestAction.SpinOnce_fork()
 
-    def fnRotateToRelativeLine(self, distance, Kp=0.2, v=0.):
+    def fnRotateToRelativeLine(self, distance, Kp, v):
         time_needed = distance / (Kp * v)   # 計算所需的行駛時間
-        start_time = self.get_clock().now().to_msg().sec    # 獲取當前時間
+        start_time = Clock().now().to_msg().sec  # 獲取當前時間（秒）
         # 開始移動
-        while (self.get_clock().now().to_msg().sec - start_time) < time_needed:
-            self.cmd_vel.fnGoStraight(Kp,v)
+        while (Clock().now().to_msg().sec) < (start_time + time_needed):
+            self.TestAction.get_logger().info(f'time_needed:{time_needed}')
+            self.cmd_vel.fnGoStraight(Kp, v)
             time.sleep(0.1)  # 每 0.1 秒發送一次指令
         self.cmd_vel.fnStop()   # 停止機器人
+        return True
 
-    def fnRotateToRelativeAngle(self, target_angle, Kp=0.2, theta=0.):
+    def fnRotateToRelativeAngle(self, target_angle, Kp, theta):
         target_angle_rad = math.radians(target_angle)   # 計算目標角度（弧度）
-        time_needed = target_angle_rad / (Kp * theta)   # 計算所需的行駛時間
-        start_time = self.get_clock().now().to_msg().sec    # 記錄開始的時間
-        while (self.get_clock().now().to_msg().sec - start_time) < time_needed:
-            self.cmd_vel.fnTurn(Kp,theta)
+        time_needed = target_angle_rad / (Kp * theta)    # 計算所需的行駛時間
+        start_time = Clock().now().to_msg().sec  # 獲取當前時間（秒）
+        while (Clock().now().to_msg().sec) < (start_time + time_needed):
+            self.TestAction.get_logger().info(f'time_needed:{time_needed}')
+            self.cmd_vel.fnTurn(Kp, theta)
             time.sleep(0.1)  # 每 0.1 秒發送一次指令
         self.cmd_vel.fnStop()   # 停止機器人
+        return True
         
     def fnseqDeadReckoning(self, dead_reckoning_dist):#(使用里程紀計算)移動到離現在位置dead_reckoning_dist公尺的地方, 1.0 = 朝向marker前進1公尺, -1.0 = 朝向marker後退1公尺
         self.SpinOnce()

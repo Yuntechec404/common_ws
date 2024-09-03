@@ -33,25 +33,25 @@ class VisualServoingActionServer(Node):
         self._action_server = ActionServer(self, VisualServoing, 'VisualServoing', self.execute_callback, callback_group=self.callback_group2)
 
     async def execute_callback(self, goal_handle):
-        self.get_logger().info('Received goal: Command={}, Layer={}'.format(goal_handle.request.command, goal_handle.request.layer))
+        self.get_logger().info('Received goal: Command={}, layer_dist={}'.format(goal_handle.request.command, goal_handle.request.layer_dist))
         if(goal_handle.request.command == "parking_bodycamera"):
             self.shelf_or_pallet = True  # True: shelf, False: pallet
-            self.action_sequence.parking_bodycamera(goal_handle, goal_handle.request.layer)
+            self.action_sequence.parking_bodycamera(goal_handle, goal_handle.request.layer_dist)
         elif(goal_handle.request.command == "parking_forkcamera"):
             self.shelf_or_pallet = False  # True: shelf, False: pallet
-            self.action_sequence.parking_forkcamera(goal_handle, goal_handle.request.layer)
+            self.action_sequence.parking_forkcamera(goal_handle, goal_handle.request.layer_dist)
         elif(goal_handle.request.command == "raise_pallet"):
             self.shelf_or_pallet = True
-            self.action_sequence.raise_pallet(goal_handle, goal_handle.request.layer)
+            self.action_sequence.raise_pallet(goal_handle, goal_handle.request.layer_dist)
         elif(goal_handle.request.command == "drop_pallet"):
             self.shelf_or_pallet = True
-            self.action_sequence.drop_pallet(goal_handle, goal_handle.request.layer)
+            self.action_sequence.drop_pallet(goal_handle, goal_handle.request.layer_dist)
         elif(goal_handle.request.command == "odom_front"):
             self.shelf_or_pallet = True
-            self.action_sequence.odom_front(goal_handle, goal_handle.request.dist)
+            self.action_sequence.odom_front(goal_handle, goal_handle.request.layer_dist)
         elif(goal_handle.request.command == "odom_turn"):
             self.shelf_or_pallet = True
-            self.action_sequence.odom_turn(goal_handle, goal_handle.request.dist)
+            self.action_sequence.odom_turn(goal_handle, goal_handle.request.layer_dist)
         else:
             self.get_logger().info("Unknown command")
             goal_handle.abort()

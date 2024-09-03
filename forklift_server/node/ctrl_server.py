@@ -37,26 +37,19 @@ class CtrlServer(Node):
             cmd = self.command_2d[self.current_command_index]
             action_type = cmd[0]
             action_name = cmd[1]
+            action_param = float(cmd[2])
 
-            if action_type == 'PBVS':
-                action_param = int(cmd[2])
+            if action_type == 'PBVS' or action_type == 'odom':
                 self.get_logger().info(f"Executing {action_type} Action: {action_name} with layer {action_param}")
-                self.execute_action(action_name, action_param,action_type)
-            elif action_type == 'odom':
-                action_param = float(cmd[2])
-                self.get_logger().info(f"Executing {action_type} Action: {action_name} with layer {action_param}")
-                self.execute_action(action_name, action_param,action_type)
+                self.execute_action(action_name, action_param)
             
             else:
                 self.get_logger().error(f"Unknown command: {cmd}")
 
-    def execute_action(self, command, parma,action_type):
+    def execute_action(self, command, action_param):
         goal_msg = VisualServoing.Goal()
         goal_msg.command = command
-        if action_type == 'PBVS':
-            goal_msg.layer = parma
-        elif action_type == 'odom':
-            goal_msg.dist = parma
+        goal_msg.layer_dist = action_param
         send_goal_future = self.pbvs_client.send_goal_async(goal_msg)
         send_goal_future.add_done_callback(self.goal_response_callback)
 

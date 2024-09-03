@@ -124,9 +124,9 @@ class ActionSequence():
             self.visual_servoing_action_server.get_logger().info('Feedback: {0}'.format(feedback))
 
             if(current_sequence == ParkingForkCameraSequence.init_fork.value):
-                if layer == 1:
+                if layer == 1.0:
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.forkcamera_parking_fork_layer1)
-                elif layer == 2:
+                elif layer == 2.0:
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.forkcamera_parking_fork_layer2)
                 else:
                     self.visual_servoing_action_server.get_logger().info('Layer is not defined')
@@ -180,9 +180,9 @@ class ActionSequence():
             self.visual_servoing_action_server.get_logger().info('Feedback: {0}'.format(feedback))
 
             if(current_sequence == RaisePalletSequence.init_fork.value):
-                if layer == 1:
+                if layer == 1.0:
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.raise_pallet_fork_init_layer1)
-                elif layer == 2:
+                elif layer == 2.0:
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.raise_pallet_fork_init_layer1)
                 else:
                     self.visual_servoing_action_server.get_logger().info('Layer is not defined')
@@ -203,9 +203,9 @@ class ActionSequence():
                     self.is_sequence_finished = False
 
             elif(current_sequence == RaisePalletSequence.fork_updown.value):
-                if layer == 1:
+                if layer == 1.0:
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.raise_pallet_raise_height_layer1)
-                elif layer == 2:
+                elif layer == 2.0:
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.raise_pallet_raise_height_layer2)
                 else:
                     self.visual_servoing_action_server.get_logger().info('Layer is not defined')
@@ -231,9 +231,9 @@ class ActionSequence():
             time.sleep(0.1)
 
             if(current_sequence == DropPalletSequence.init_fork.value):
-                if layer == 1:
+                if layer == 1.0:
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.drop_pallet_fork_init_layer1)
-                elif layer == 2:
+                elif layer == 2.0:
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.drop_pallet_fork_init_layer2)
                 else:
                     self.visual_servoing_action_server.get_logger().info('Layer is not defined')
@@ -251,9 +251,9 @@ class ActionSequence():
                     self.is_sequence_finished = False
 
             elif(current_sequence == DropPalletSequence.fork_updown.value):
-                if layer == 1:
+                if layer == 1.0:
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.drop_pallet_drop_height_layer1)
-                elif layer == 2:
+                elif layer == 2.0:
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.drop_pallet_drop_height_layer2)
                 else:
                     self.visual_servoing_action_server.get_logger().info('Layer is not defined')
@@ -277,9 +277,11 @@ class ActionSequence():
 
         while not goal_handle.is_cancel_requested:
             time.sleep(0.1)
+            feedback = str(FrontSequence(current_sequence))
+            self.visual_servoing_action_server.get_logger().info('Feedback: {0}'.format(feedback))
 
             if(current_sequence == FrontSequence.Front.value):
-                self.is_sequence_finished = self.action.fnRotateToRelativeLine(dist,0.1, 0.15)
+                self.is_sequence_finished = self.action.fnRotateToRelativeLine(dist,0.1, 2)
 
                 if self.is_sequence_finished == True:
                     return
@@ -292,9 +294,11 @@ class ActionSequence():
 
         while not goal_handle.is_cancel_requested:
             time.sleep(0.1)
+            feedback = str(TurnSequence(current_sequence))
+            self.visual_servoing_action_server.get_logger().info('Feedback: {0}'.format(feedback))
 
             if(current_sequence == TurnSequence.Turn.value):
-                self.is_sequence_finished = self.action.fnRotateToRelativeAngle(dist,0.1, 0.15)
+                self.is_sequence_finished = self.action.fnRotateToRelativeAngle(dist,0.1, 2)
 
                 if self.is_sequence_finished == True:
                     return
