@@ -56,11 +56,11 @@ class Action():
         self.updownposition = self.TestAction.SpinOnce_fork()
 
     def fnRotateToRelativeLine(self, distance, Kp, v):
-        time_needed = distance / (Kp * v)   # 計算所需的行駛時間
+        time_needed = abs(distance / (Kp * v))   # 計算所需的行駛時間
         start_time = Clock().now().to_msg().sec  # 獲取當前時間（秒）
+        self.TestAction.get_logger().info(f'time_needed:{time_needed}')
         # 開始移動
         while (Clock().now().to_msg().sec) < (start_time + time_needed):
-            self.TestAction.get_logger().info(f'time_needed:{time_needed}')
             self.cmd_vel.fnGoStraight(Kp, v)
             time.sleep(0.1)  # 每 0.1 秒發送一次指令
         self.cmd_vel.fnStop()   # 停止機器人
@@ -70,8 +70,8 @@ class Action():
         target_angle_rad = math.radians(target_angle)   # 計算目標角度（弧度）
         time_needed = target_angle_rad / (Kp * theta)    # 計算所需的行駛時間
         start_time = Clock().now().to_msg().sec  # 獲取當前時間（秒）
+        self.TestAction.get_logger().info(f'time_needed:{time_needed}')
         while (Clock().now().to_msg().sec) < (start_time + time_needed):
-            self.TestAction.get_logger().info(f'time_needed:{time_needed}')
             self.cmd_vel.fnTurn(Kp, theta)
             time.sleep(0.1)  # 每 0.1 秒發送一次指令
         self.cmd_vel.fnStop()   # 停止機器人

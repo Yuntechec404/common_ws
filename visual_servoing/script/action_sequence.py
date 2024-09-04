@@ -274,15 +274,17 @@ class ActionSequence():
     
     def odom_front(self, goal_handle, dist):
         current_sequence = FrontSequence.Front.value
-
+        self.is_sequence_finished = False
         while not goal_handle.is_cancel_requested:
             time.sleep(0.1)
             feedback = str(FrontSequence(current_sequence))
             self.visual_servoing_action_server.get_logger().info('Feedback: {0}'.format(feedback))
 
             if(current_sequence == FrontSequence.Front.value):
-                self.is_sequence_finished = self.action.fnRotateToRelativeLine(dist,0.1, 2)
-
+                if(dist < 0):
+                    self.is_sequence_finished = self.action.fnRotateToRelativeLine(-dist,0.1, -2)
+                else:
+                    self.is_sequence_finished = self.action.fnRotateToRelativeLine(dist,0.1, 2)
                 if self.is_sequence_finished == True:
                     return
             else:
@@ -291,15 +293,17 @@ class ActionSequence():
             
     def odom_turn(self, goal_handle, dist):
         current_sequence = TurnSequence.Turn.value
-
+        self.is_sequence_finished = False
         while not goal_handle.is_cancel_requested:
             time.sleep(0.1)
             feedback = str(TurnSequence(current_sequence))
             self.visual_servoing_action_server.get_logger().info('Feedback: {0}'.format(feedback))
 
             if(current_sequence == TurnSequence.Turn.value):
-                self.is_sequence_finished = self.action.fnRotateToRelativeAngle(dist,0.1, 2)
-
+                if(dist < 0):
+                    self.is_sequence_finished = self.action.fnRotateToRelativeAngle(dist,0.1, -2)
+                else:
+                    self.is_sequence_finished = self.action.fnRotateToRelativeAngle(dist,0.1, 2)
                 if self.is_sequence_finished == True:
                     return
                 else:
