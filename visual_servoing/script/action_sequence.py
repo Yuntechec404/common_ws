@@ -244,8 +244,10 @@ class ActionSequence():
                     self.is_sequence_finished = False
 
             elif(current_sequence == DropPalletSequence.dead_reckoning.value):
-                self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_dead_reckoning_dist)
-                
+                if(self.visual_servoing_action_server.shelf_format):
+                    self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_dead_reckoning_dist)
+                else:
+                    self.is_sequence_finished = self.action.fnseqDeadReckoning(self.visual_servoing_action_server.drop_pallet_dead_reckoning_dist)
                 if self.is_sequence_finished == True:
                     current_sequence = DropPalletSequence.fork_updown.value
                     self.is_sequence_finished = False
@@ -264,8 +266,10 @@ class ActionSequence():
                     self.is_sequence_finished = False
 
             elif(current_sequence == DropPalletSequence.back.value):
-                self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_back_distance)
-
+                if(self.visual_servoing_action_server.shelf_format):
+                    self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_back_distance)
+                else:
+                    self.is_sequence_finished = self.action.fnseqDeadReckoning(self.visual_servoing_action_server.drop_pallet_back_distance)
                 if self.is_sequence_finished == True:
                     return
             else:
