@@ -44,7 +44,7 @@ class VisualServoingActionServer(Node):
             self.shelf_or_pallet = True
             self.action_sequence.raise_pallet(goal_handle, goal_handle.request.layer_dist)
         elif(goal_handle.request.command == "drop_pallet"):
-            self.shelf_or_pallet = True
+            self.shelf_or_pallet = False
             self.action_sequence.drop_pallet(goal_handle, goal_handle.request.layer_dist)
         elif(goal_handle.request.command == "odom_front"):
             self.shelf_or_pallet = True

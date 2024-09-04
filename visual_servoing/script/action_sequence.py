@@ -183,7 +183,7 @@ class ActionSequence():
                 if layer == 1.0:
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.raise_pallet_fork_init_layer1)
                 elif layer == 2.0:
-                    self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.raise_pallet_fork_init_layer1)
+                    self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.raise_pallet_fork_init_layer2)
                 else:
                     self.visual_servoing_action_server.get_logger().info('Layer is not defined')
                     return
