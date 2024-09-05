@@ -269,7 +269,7 @@ class ActionSequence():
                 if(self.visual_servoing_action_server.shelf_format):
                     self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_back_distance)
                 else:
-                    self.is_sequence_finished = self.action.fnseqDeadReckoning(self.visual_servoing_action_server.drop_pallet_back_distance)
+                    self.is_sequence_finished = self.action.fnseqDeadReckoning(self.visual_servoing_action_server.drop_pallet_back_distance * -1)
                 if self.is_sequence_finished == True:
                     return
             else:
