@@ -28,18 +28,23 @@ class PoseVisualization(Node):
         self.root = tk.Tk()
         self.root.title("Robot Visualization")
 
-        self.robot_pose_label = tk.Label(self.root, text="Robot Pose: x=0.0, y=0.0, theta=0.0")
-        self.robot_pose_label.pack()
+        # self.robot_pose_label = tk.Label(self.root, text="Robot Pose: x=0.0, y=0.0, theta=0.0")
+        # self.robot_pose_label.pack()
         
-        self.marker_pose_label = tk.Label(self.root, text="Marker Pose: x=0.0, y=0.0, theta=0.0")
-        self.marker_pose_label.pack()
+        # self.marker_pose_label = tk.Label(self.root, text="Marker Pose: x=0.0, y=0.0, theta=0.0")
+        # self.marker_pose_label.pack()
         
-        self.pallet_pose_label = tk.Label(self.root, text="Pallet Pose: x=0.0, y=0.0, theta=0.0")
+        self.pallet_pose_label = tk.Label(self.root, text="apple Pose: x=0.0, y=0.0, theta=0.0")
         self.pallet_pose_label.pack()
+
+        self.pallet_z_pose_label = tk.Label(self.root, text="apple Pose: z=0.0")
+        self.pallet_z_pose_label.pack()
 
         self.fork_pose_label = tk.Label(self.root, text="Fork Position: 0.0")
         self.fork_pose_label.pack()
         
+
+
         self.update_gui()
         self.root.mainloop() 
 
@@ -56,12 +61,13 @@ class PoseVisualization(Node):
     def update_gui(self):
         rclpy.spin_once(self)
         self.log_info()
-        self.robot_pose_label.config(text="Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
-            self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
-        self.marker_pose_label.config(text="Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
-            self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
-        self.pallet_pose_label.config(text="Pallet Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
-            self.pallet_2d_pose_x, self.pallet_2d_pose_y, self.pallet_2d_theta))
+        # self.robot_pose_label.config(text="Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
+        #     self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
+        # self.marker_pose_label.config(text="Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
+        #     self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
+        self.pallet_pose_label.config(text="apple Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
+            self.pallet_2d_pose_x, self.pallet_2d_pose_y, self.marker_2d_theta))
+        self.pallet_z_pose_label.config(text="apple Pose: z={:.3f}".format(self.pallet_2d_pose_z))  # 更新z轴标签
         self.fork_pose_label.config(text="Fork Position: {:.3f}".format(self.updownposition))
         self.root.after(100, self.update_gui)
 
@@ -75,11 +81,14 @@ class PoseVisualization(Node):
         # AprilTag_variable
         self.marker_2d_pose_x = 0.0
         self.marker_2d_pose_y = 0.0
+        self.marker_2d_pose_z = 0.0
+
         self.marker_2d_theta = 0.0
         # pallet variable
         self.pallet_2d_pose_x = 0.0
         self.pallet_2d_pose_y = 0.0
         self.pallet_2d_theta = 0.0
+        self.pallet_2d_pose_z = 0.0  # 新增的z轴属性
         # Forklift_variable
         self.updownposition = 0.0      
 
@@ -93,26 +102,18 @@ class PoseVisualization(Node):
         self.pallet_topic = self.get_parameter('pallet_topic').get_parameter_value().string_value
         self.declare_parameter('forkpose_topic', '/fork_pose')
         self.forkpose_topic = self.get_parameter('forkpose_topic').get_parameter_value().string_value
-        self.declare_parameter('shelf_format', True)
-        self.shelf_format = self.get_parameter('shelf_format').get_parameter_value().bool_value
 
         self.get_logger().info("Get subscriber topic parameter")
         self.get_logger().info("odom_topic: {}, type: {}".format(self.odom_topic, type(self.odom_topic)))
         self.get_logger().info("apriltag_topic: {}, type: {}".format(self.apriltag_topic, type(self.apriltag_topic)))
         self.get_logger().info("pallet_topic: {}, type: {}".format(self.pallet_topic, type(self.pallet_topic)))
         self.get_logger().info("forkpose_topic: {}, type: {}".format(self.forkpose_topic, type(self.forkpose_topic)))
-        self.get_logger().info("shelf_format: {}, type: {}".format(self.shelf_format, type(self.shelf_format)))
-
 
     def create_subscriber(self):
         self.odom_sub = self.create_subscription(Odometry, self.odom_topic, self.odom_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
+        self.apriltag_sub = self.create_subscription(PoseArray, self.apriltag_topic, self.apriltag_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         self.pallet_sub = self.create_subscription(Pose, self.pallet_topic, self.pallet_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         self.forkpose_sub = self.create_subscription(Meteorcar, self.forkpose_topic, self.cbGetforkpos, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
-        if(self.shelf_format == True):
-            self.apriltag_sub = self.create_subscription(PoseArray, self.apriltag_topic, self.apriltag_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
-        else:
-            self.apriltag_sub = self.create_subscription(Pose, self.apriltag_topic, self.apriltag_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
-
 
     def log_info(self):
         # rclpy.spin_once(self)
@@ -149,10 +150,7 @@ class PoseVisualization(Node):
     def apriltag_callback(self, msg):
         # self.get_logger().info("Shelf callback")
         try:
-            if(self.apriltag_sub.msg_type == PoseArray):
-                marker_msg = msg.poses[0]
-            else:
-                marker_msg = msg
+            marker_msg = msg.poses[0]
             quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
             theta = tf_transformations.euler_from_quaternion(quaternion)[1]
             self.marker_2d_pose_x = -marker_msg.position.z
@@ -170,6 +168,8 @@ class PoseVisualization(Node):
             theta = tf_transformations.euler_from_quaternion(quaternion)[1]
             self.pallet_2d_pose_x = -marker_msg.position.z
             self.pallet_2d_pose_y = marker_msg.position.x
+            self.pallet_2d_pose_z = marker_msg.position.y  # 更新z轴信息
+
             self.pallet_2d_theta = -theta
             # self.get_logger().info("Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
         except:

@@ -14,12 +14,12 @@ from rclpy.node import Node
 from enum import Enum
 import time
 import statistics
-from rclpy.clock import Clock
 def fnCalcDistPoints(x1, x2, y1, y2):
     return math.sqrt((x1 - x2) ** 2. + (y1 - y2) ** 2.)
 
 class Action():
     def __init__(self, TestAction):
+        
         # cmd_vel
         self.TestAction = TestAction
         self.cmd_vel = cmd_vel(TestAction)
@@ -41,6 +41,11 @@ class Action():
         self.initial_marker_pose_x = 0.0
         self.initial_marker_pose_y = 0.0
         self.initial_marker_pose_theta = 0.0
+        # pallet variable
+        self.pallet_2d_pose_x = 0.0
+        self.pallet_2d_pose_y = 0.0
+        self.pallet_2d_theta = 0.0
+        self.pallet_2d_pose_z = 0.0  # 新增的z轴属性
         # Fork_param
         self.forwardbackpostion = 0.0
         self.updownposition = 0.0
@@ -50,33 +55,14 @@ class Action():
         self.is_triggered = False
 
     def SpinOnce(self):
-        (self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta, \
-         self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta)=self.TestAction.SpinOnce()
+        (self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta, 
+        self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta,
+        self.pallet_2d_pose_x, self.pallet_2d_pose_y, self.pallet_2d_pose_z) = self.TestAction.SpinOnce()   #新增fruits的xyz軸属性
+
+    
     def SpinOnce_fork(self):
         self.updownposition = self.TestAction.SpinOnce_fork()
 
-    def fnRotateToRelativeLine(self, distance, Kp, v):
-        time_needed = abs(distance / (Kp * v))   # 計算所需的行駛時間
-        start_time = Clock().now().to_msg().sec  # 獲取當前時間（秒）
-        self.TestAction.get_logger().info(f'time_needed:{time_needed}')
-        # 開始移動
-        while (Clock().now().to_msg().sec) < (start_time + time_needed):
-            self.cmd_vel.fnGoStraight(Kp, v)
-            time.sleep(0.1)  # 每 0.1 秒發送一次指令
-        self.cmd_vel.fnStop()   # 停止機器人
-        return True
-
-    def fnRotateToRelativeAngle(self, target_angle, Kp, theta):
-        target_angle_rad = math.radians(target_angle)   # 計算目標角度（弧度）
-        time_needed = target_angle_rad / (Kp * theta)    # 計算所需的行駛時間
-        start_time = Clock().now().to_msg().sec  # 獲取當前時間（秒）
-        self.TestAction.get_logger().info(f'time_needed:{time_needed}')
-        while (Clock().now().to_msg().sec) < (start_time + time_needed):
-            self.cmd_vel.fnTurn(Kp, theta)
-            time.sleep(0.1)  # 每 0.1 秒發送一次指令
-        self.cmd_vel.fnStop()   # 停止機器人
-        return True
-        
     def fnseqDeadReckoning(self, dead_reckoning_dist):#(使用里程紀計算)移動到離現在位置dead_reckoning_dist公尺的地方, 1.0 = 朝向marker前進1公尺, -1.0 = 朝向marker後退1公尺
         self.SpinOnce()
         Kp = 0.2
@@ -188,7 +174,7 @@ class Action():
         else:
             self.check_wait_time =0
             return False
-    
+        
     def fnSeqMovingNearbyParkingLot(self, desired_dist_threshold): #如果desired_dist的值小於desired_dist_threshold, 則不執行此動作
         self.SpinOnce()
         Kp = 0.2
@@ -317,22 +303,23 @@ class Action():
         else:
             self.check_wait_time =0
             return False
-        
-    def fnForkUpdown(self, desired_updownposition):#0~2.7
+    
+    def fnForkFruit(self, x_pose_threshold):#0~2.7
         self.SpinOnce_fork()
-        fork_threshold = 0.001
-        if(desired_updownposition < 0):
-            return True
-        # print("desired_updownposition", desired_updownposition)
-        # print("self.updownposition", self.updownposition)
-        if self.updownposition < desired_updownposition - fork_threshold:
+        self.SpinOnce()
+        self.TestAction.get_logger().info(f"Marker 2D Pose: x={self.pallet_2d_pose_x}, y={self.pallet_2d_pose_y}, z={self.pallet_2d_pose_z}")
+        if( self.pallet_2d_pose_z < -x_pose_threshold):
             self.cmd_vel.fnfork(2000.0)
+            self.TestAction.get_logger().info("Fork up")
             return False
-        elif self.updownposition > desired_updownposition + fork_threshold:
+
+        elif (self.pallet_2d_pose_z > x_pose_threshold):
             self.cmd_vel.fnfork(-2000.0)
+            self.TestAction.get_logger().info("Fork down")
             return False
-        else:
+        else :
             self.cmd_vel.fnfork(0.0)
+            self.TestAction.get_logger().info("Fork stop")
             return True
         
     def fnSeqdecide(self, decide_dist):#decide_dist偏離多少公分要後退
@@ -342,6 +329,23 @@ class Action():
             return True
         else:
             return False
+
+    def fnForkUpdown(self, desired_updownposition):#0~2.7
+        self.SpinOnce_fork()
+        fork_threshold = 0.001
+        if(desired_updownposition < 0):
+            return True
+
+        if self.updownposition < desired_updownposition - fork_threshold:
+            self.cmd_vel.fnfork(2000.0)
+            return False
+        dist = self.marker_2d_pose_y
+        if self.updownposition > desired_updownposition + fork_threshold:
+            self.cmd_vel.fnfork(-2000.0)
+            return False
+        else:
+            self.cmd_vel.fnfork(0.0)
+            return True
         
 class cmd_vel():
     def __init__(self, TestAction):
@@ -395,105 +399,25 @@ class cmd_vel():
         twist.angular.z = Kp * theta
         self.cmd_pub(twist)
 
-'''
-Unit Test for Action class
-
-class TestAction(Node):
-    def __init__(self):
-        super().__init__('action_test')
-        self.init_parame()
-        self.odom_sub = self.create_subscription(Odometry, "/wheel_odom", self.odom_callback, qos_profile=qos_profile_sensor_data)
-        self.shelf_sub = self.create_subscription(PoseArray, "/apriltag_poses", self.shelf_callback, qos_profile=qos_profile_sensor_data)
-        self.forkpose_sub = self.create_subscription(Meteorcar, "/forklift_pose", self.cbGetforkpos, qos_profile=qos_profile_sensor_data)
-        self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", 1)
-        self.fork_pub = self.create_publisher(Meteorcar, "/cmd_fork", 1)
-
-        self.action = Action(self)
-        rate = self.create_rate(10)
-        for i in range(10):
-            self.SpinOnce()
-            time.sleep(0.1)
-
-        while rclpy.ok():
-            rclpy.spin_once(self)
-            self.get_logger().info("visual_servoing fnSeqChangingDirection")
-            self.get_logger().info("Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
-            self.get_logger().info("Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
-            self.get_logger().info("Forklift Pose: updownposition={:.3f}".format(self.updownposition))
-            if self.action.fnForkUpdown(0.0):
-                break
-            time.sleep(0.1)
-
-        # while rclpy.ok():
-        #     rclpy.spin_once(self)
-        #     self.get_logger().info("visual_servoing fnSeqChangingDirection")
-        #     self.get_logger().info("Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
-        #     self.get_logger().info("Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
-        #     time.sleep(0.1)
-    
-    def init_parame(self):
-        # Odometry_variable
-        self.robot_2d_pose_x = 0.0
-        self.robot_2d_pose_y = 0.0
-        self.robot_2d_theta = 0.0
-        self.previous_robot_2d_theta = 0.0
-        self.total_robot_2d_theta = 0.0
-        # AprilTag_variable
-        self.shelf_or_pallet = True   # True: shelf, False: pallet
-        self.offset_x = 0.0
-        self.marker_2d_pose_x = 0.0
-        self.marker_2d_pose_y = 0.0
-        self.marker_2d_theta = 0.0
-        # Forklift_variable
-        self.updownposition = 0.0     
-    
-    def odom_callback(self, msg):
-        quaternion = (msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w)
-        theta = tf_transformations.euler_from_quaternion(quaternion)[2]
-        if theta < 0:
-            theta = theta + math.pi * 2
-        if theta > math.pi * 2:
-            theta = theta - math.pi * 2
-
-        self.robot_2d_pose_x = msg.pose.pose.position.x
-        self.robot_2d_pose_y = msg.pose.pose.position.y
-        self.robot_2d_theta = theta
-
-        if (self.robot_2d_theta - self.previous_robot_2d_theta) > 5.:
-            d_theta = (self.robot_2d_theta - self.previous_robot_2d_theta) - 2 * math.pi
-        elif (self.robot_2d_theta - self.previous_robot_2d_theta) < -5.:
-            d_theta = (self.robot_2d_theta - self.previous_robot_2d_theta) + 2 * math.pi
-        else:
-            d_theta = (self.robot_2d_theta - self.previous_robot_2d_theta)
-
-        self.total_robot_2d_theta = self.total_robot_2d_theta + d_theta
-        self.previous_robot_2d_theta = self.robot_2d_theta
-
-        self.robot_2d_theta = self.total_robot_2d_theta
-
-    def shelf_callback(self, msg):
-        # self.get_logger().info("Shelf callback")
-        try:
-            if self.shelf_or_pallet == True:
-                marker_msg = msg.poses[0]
-                quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
-                theta = tf_transformations.euler_from_quaternion(quaternion)[1]
-                self.marker_2d_pose_x = -marker_msg.position.z
-                self.marker_2d_pose_y = marker_msg.position.x + self.offset_x
-                self.marker_2d_theta = -theta
-            else:
-                pass
-        except:
-            pass
-    def cbGetforkpos(self, msg):
-        self.updownposition = msg.fork_position
-
-    def SpinOnce(self):
-        rclpy.spin_once(self)
-        return self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta, \
-               self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta
-    
+        
     def SpinOnce_fork(self):
+        rclpy.spin_once(self)
+        return self.updownposition
+    
+def main(args=None):
+    rclpy.init(args=args)
+
+    test_action = TestAction()
+    try:
+        rclpy.spin(test_action)
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == '__main__':
+    main()
+
+'''    def SpinOnce_fork(self):
         rclpy.spin_once(self)
         return self.updownposition
     

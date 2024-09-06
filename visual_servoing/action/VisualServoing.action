@@ -1,6 +1,6 @@
 #goal definition
 string command
-float32 layer_dist
+int64 layer
 ---
 #result definition
 string result
