@@ -43,7 +43,7 @@
     <param name="drop_pallet_dead_reckoning_dist" value = "0.65" /><!--直線移動到距離Tag多少公尺的地方/-->
     <param name="drop_pallet_drop_height_layer1" value = "0.0" /><!--牙叉放下棧板的高度/-->
     <param name="drop_pallet_drop_height_layer2" value = "0.56" /><!--牙叉放下棧板的高度/-->
-    <param name="drop_pallet_back_distance" value = "0.8" /><!--放下棧板後，後退距離/-->
+    <param name="drop_pallet_back_distance" value = "-0.8" /><!--放下棧板後，後退距離/-->
     <!--param name="drop_pallet_navigation_helght" value = "0.0" /--><!--完成放置棧板動作後，接續下一個動作時牙叉高度, TODO 此功能在本版本中尚未實現/-->
   </node>
 </launch>

@@ -196,7 +196,7 @@ class ActionSequence():
 
             elif(current_sequence == RaisePalletSequence.dead_reckoning.value):
                 self.visual_servoing_action_server.get_logger().info('fnseqDeadReckoning: {0}'.format(self.visual_servoing_action_server.raise_pallet_dead_reckoning_dist))
-                self.is_sequence_finished = self.action.fnseqDeadReckoning(self.visual_servoing_action_server.raise_pallet_dead_reckoning_dist)
+                self.is_sequence_finished = self.action.fnseqDeadReckoning(-self.visual_servoing_action_server.raise_pallet_dead_reckoning_dist)
                 
                 if self.is_sequence_finished == True:
                     current_sequence = RaisePalletSequence.fork_updown.value
@@ -216,7 +216,7 @@ class ActionSequence():
                     self.is_sequence_finished = False
 
             elif(current_sequence == RaisePalletSequence.back.value):
-                self.is_sequence_finished = self.action.fnseqDeadReckoning(self.visual_servoing_action_server.raise_pallet_back_dist)
+                self.is_sequence_finished = self.action.fnseqDeadReckoning(-self.visual_servoing_action_server.raise_pallet_back_dist)
 
                 if self.is_sequence_finished == True:
                     return
@@ -247,7 +247,7 @@ class ActionSequence():
                 if(self.visual_servoing_action_server.shelf_format):
                     self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_dead_reckoning_dist)
                 else:
-                    self.is_sequence_finished = self.action.fnseqDeadReckoning(self.visual_servoing_action_server.drop_pallet_dead_reckoning_dist)
+                    self.is_sequence_finished = self.action.fnseqDeadReckoning(-self.visual_servoing_action_server.drop_pallet_dead_reckoning_dist)
                 if self.is_sequence_finished == True:
                     current_sequence = DropPalletSequence.fork_updown.value
                     self.is_sequence_finished = False
@@ -269,7 +269,7 @@ class ActionSequence():
                 if(self.visual_servoing_action_server.shelf_format):
                     self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_back_distance)
                 else:
-                    self.is_sequence_finished = self.action.fnseqDeadReckoning(self.visual_servoing_action_server.drop_pallet_back_distance * -1)
+                    self.is_sequence_finished = self.action.fnseqDeadReckoning(-self.visual_servoing_action_server.drop_pallet_back_distance)
                 if self.is_sequence_finished == True:
                     return
             else:
@@ -285,10 +285,7 @@ class ActionSequence():
             self.visual_servoing_action_server.get_logger().info('Feedback: {0}'.format(feedback))
 
             if(current_sequence == FrontSequence.Front.value):
-                if(dist < 0):
-                    self.is_sequence_finished = self.action.fnRotateToRelativeLine(-dist,0.1, -2)
-                else:
-                    self.is_sequence_finished = self.action.fnRotateToRelativeLine(dist,0.1, 2)
+                self.is_sequence_finished = self.action.fnseqDeadReckoning(dist)
                 if self.is_sequence_finished == True:
                     return
             else:
@@ -304,10 +301,11 @@ class ActionSequence():
             self.visual_servoing_action_server.get_logger().info('Feedback: {0}'.format(feedback))
 
             if(current_sequence == TurnSequence.Turn.value):
+                # self.is_sequence_finished = self.action.fnseqDeadReckoningAngle_2(dist)
                 if(dist < 0):
-                    self.is_sequence_finished = self.action.fnRotateToRelativeAngle(dist,0.1, -2)
+                    self.is_sequence_finished = self.action.fnseqDeadReckoningAngle(dist,0.1, -2)
                 else:
-                    self.is_sequence_finished = self.action.fnRotateToRelativeAngle(dist,0.1, 2)
+                    self.is_sequence_finished = self.action.fnseqDeadReckoningAngle(dist,0.1, 2)
                 if self.is_sequence_finished == True:
                     return
                 else:
