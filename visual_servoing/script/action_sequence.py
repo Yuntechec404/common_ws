@@ -301,16 +301,16 @@ class ActionSequence():
             self.visual_servoing_action_server.get_logger().info('Feedback: {0}'.format(feedback))
 
             if(current_sequence == TurnSequence.Turn.value):
-                # self.is_sequence_finished = self.action.fnseqDeadReckoningAngle_2(dist)
-                if(dist < 0):
-                    self.is_sequence_finished = self.action.fnseqDeadReckoningAngle(dist,0.1, -2)
-                else:
-                    self.is_sequence_finished = self.action.fnseqDeadReckoningAngle(dist,0.1, 2)
+                self.is_sequence_finished = self.action.fnseqDeadReckoningAngle_2(dist)
+                # if(dist < 0):
+                #     self.is_sequence_finished = self.action.fnseqDeadReckoningAngle_2(dist,0.1, -2)
+                # else:
+                #     self.is_sequence_finished = self.action.fnseqDeadReckoningAngle(dist,0.1, 2)
                 if self.is_sequence_finished == True:
                     return
-                else:
-                    self.visual_servoing_action_server.get_logger().info('Error: {0} does not exist'.format(current_sequence))
-                    return 
+                # else:
+                #     self.visual_servoing_action_server.get_logger().info('Error: {0} does not exist'.format(current_sequence))
+                #     return 
             else:
                 self.visual_servoing_action_server.get_logger().info('Error: {0} does not exist'.format(current_sequence))
                 return

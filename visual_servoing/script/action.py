@@ -79,22 +79,16 @@ class Action():
     
     def fnseqDeadReckoningAngle_2(self, target_angle):
         self.SpinOnce()  # 確保獲取到最新位置
-        Kp = 0.1
-        threshold = 0.05  # 停止的閾值（弧度）
+        Kp = 0.2
+        threshold = 0.015  # 停止的閾值（弧度）
         target_angle_rad = math.radians(target_angle)   # 將目標角度轉換為弧度
-        if not self.is_triggered:    # 初始化：如果是第一次調用，記錄初始累積角度
+        if not self.is_triggered:   # 初始化：如果是第一次調用，記錄初始累積角度
             self.is_triggered = True
             self.initial_total_theta = self.robot_2d_theta  # 使用累積的總角度作為初始角度
         
-        current_angle = self.robot_2d_theta - self.initial_total_theta    # 計算當前已旋轉的角度
+        current_angle = self.robot_2d_theta - self.initial_total_theta  # 計算當前已旋轉的角度
         remaining_angle = target_angle_rad - current_angle  # 計算剩餘的旋轉角度
-        self.TestAction.get_logger().info(f'target_angle_rad:{target_angle_rad}')
-        self.TestAction.get_logger().info(f'initial_total_theta:{self.initial_total_theta}')
-        self.TestAction.get_logger().info(f'self.robot_2d_theta:{self.robot_2d_theta}')
-        self.TestAction.get_logger().info(f'current_angle:{current_angle}')
-        self.TestAction.get_logger().info(f'remaining_angle:{remaining_angle}')
-        self.TestAction.get_logger().info(f'----------------------------------------')
-        if abs(remaining_angle) < threshold:  # 判斷是否達到目標角度
+        if abs(remaining_angle) < threshold:   # 判斷是否達到目標角度
             self.cmd_vel.fnStop()  # 停止機器人
             self.is_triggered = False  # 重置觸發狀態
             return True
