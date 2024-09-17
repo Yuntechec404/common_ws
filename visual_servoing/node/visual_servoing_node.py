@@ -7,6 +7,7 @@ from visual_servoing.action import VisualServoing
 from geometry_msgs.msg import PoseArray, Pose, Twist
 from nav_msgs.msg import Odometry
 from forklift_driver.msg import Meteorcar
+from visp_megapose.msg import Confidence
 # ROS2 
 import rclpy
 from rclpy.action import ActionServer
@@ -19,6 +20,14 @@ from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallb
 # The MutuallyExclusiveCallbackGroup creates a group of mutually exclusive callbacks that can be called from multiple threads.
 # 動作流程
 from action_sequence import ActionSequence
+from dataclasses import dataclass
+
+@dataclass
+class DetectionConfidence:
+    pallet_confidence: float
+    pallet_detection: bool
+    shelf_confidence: float
+    shelf_detection: bool
 
 class VisualServoingActionServer(Node):
     def __init__(self):
@@ -77,7 +86,14 @@ class VisualServoingActionServer(Node):
         self.marker_2d_pose_y = 0.0
         self.marker_2d_theta = 0.0
         # Forklift_variable
-        self.updownposition = 0.0      
+        self.updownposition = 0.0
+        # confidence_variable
+        self.detectionConfidence = DetectionConfidence(
+            pallet_confidence = 0.0,
+            pallet_detection = False,
+            shelf_confidence = 0.0,
+            shelf_detection = False
+        )
 
     def get_parameters(self):
         # get subscriber topic parameter
@@ -91,6 +107,10 @@ class VisualServoingActionServer(Node):
         self.forkpose_topic = self.get_parameter('forkpose_topic').get_parameter_value().string_value
         self.declare_parameter('shelf_format', True)
         self.shelf_format = self.get_parameter('shelf_format').get_parameter_value().bool_value
+        self.declare_parameter('confidence_minimum', 0.5)
+        self.confidence_minimum = self.get_parameter('confidence_minimum').get_parameter_value().double_value
+        self.declare_parameter('TF_replace', 0.5)
+        self.TF_replace = self.get_parameter('TF_replace').get_parameter_value().double_value
 
         self.get_logger().info("Get subscriber topic parameter")
         self.get_logger().info("odom_topic: {}, type: {}".format(self.odom_topic, type(self.odom_topic)))
@@ -98,6 +118,8 @@ class VisualServoingActionServer(Node):
         self.get_logger().info("pallet_topic: {}, type: {}".format(self.pallet_topic, type(self.pallet_topic)))
         self.get_logger().info("forkpose_topic: {}, type: {}".format(self.forkpose_topic, type(self.forkpose_topic)))
         self.get_logger().info("shelf_format: {}, type: {}".format(self.shelf_format, type(self.shelf_format)))
+        self.get_logger().info("confidence_minimum: {}, type: {}".format(self.confidence_minimum, type(self.confidence_minimum)))
+        self.get_logger().info("TF_replace: {}, type: {}".format(self.TF_replace, type(self.TF_replace)))
 
         # get bodycamera parking parameter
         self.declare_parameter('bodycamera_tag_offset_x', 0.0)
@@ -214,11 +236,13 @@ class VisualServoingActionServer(Node):
         self.odom_sub = self.create_subscription(Odometry, self.odom_topic, self.odom_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         self.pallet_sub = self.create_subscription(Pose, self.pallet_topic, self.pallet_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         self.forkpose_sub = self.create_subscription(Meteorcar, self.forkpose_topic, self.cbGetforkpos, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
+        self.pallet_confidence_sub = self.create_subscription(Confidence, self.pallet_topic + "_confidence", self.cbPalletConfidence, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", 1, callback_group=self.callback_group)
         self.fork_pub = self.create_publisher(Meteorcar, "/cmd_fork", 1, callback_group=self.callback_group)
         if(self.shelf_format == True):
             self.shelf_sub = self.create_subscription(PoseArray, self.shelf_topic, self.shelf_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         else:
+            self.shelf_confidence_sub = self.create_subscription(Confidence, self.shelf_topic + "_confidence", self.cbShelfConfidence, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
             self.shelf_sub = self.create_subscription(Pose, self.shelf_topic, self.shelf_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
 
     def log_info(self):
@@ -236,6 +260,10 @@ class VisualServoingActionServer(Node):
     def SpinOnce_fork(self):
         # rclpy.spin_once(self)
         return self.updownposition
+    
+    def SpinOnce_confidence(self):
+        # rclpy.spin_once(self)
+        return self.detectionConfidence
 
     def odom_callback(self, msg):
         quaternion = (msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w)
@@ -300,6 +328,14 @@ class VisualServoingActionServer(Node):
     def cbGetforkpos(self, msg):
         # self.get_logger().info("cbGetforkpos")
         self.updownposition = msg.fork_position
+        
+    def cbPalletConfidence(self, msg):
+        self.detectionConfidence.pallet_confidence = msg.object_confidence
+        self.detectionConfidence.pallet_detection = msg.model_detection
+
+    def cbShelfConfidence(self, msg):
+        self.detectionConfidence.shelf_confidence = msg.object_confidence
+        self.detectionConfidence.shelf_detection = msg.model_detection
 
 def main(args=None):
     rclpy.init(args=args)
