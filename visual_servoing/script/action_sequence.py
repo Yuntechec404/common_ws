@@ -67,10 +67,9 @@ class ActionSequence():
                     self.is_sequence_finished = False
             
             elif(current_sequence == ParkingBodyCameraSequence.changing_direction.value):
-                self.is_sequence_finished = self.action.fnSeqChangingDirection(self.visual_servoing_action_server.bodycamera_ChangingDirection_threshold)
+                self.is_sequence_finished = self.action.fnSeqChangingDirection(self.visual_servoing_action_server.bodycamera_ChangingDirection_threshold, "bodycamera")
 
                 if self.is_sequence_finished == True:
-                    time.sleep(5)       # yolo 偵測延時
                     current_sequence = ParkingBodyCameraSequence.move_nearby_parking_lot.value
                     self.is_sequence_finished = False
             
@@ -87,7 +86,7 @@ class ActionSequence():
                     current_sequence = ParkingBodyCameraSequence.changingtheta.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingBodyCameraSequence.changingtheta.value):
-                self.is_sequence_finished = self.action.fnSeqChangingtheta(self.visual_servoing_action_server.bodycamera_Changingtheta_threshold)
+                self.is_sequence_finished = self.action.fnSeqChangingtheta(self.visual_servoing_action_server.bodycamera_Changingtheta_threshold, "bodycamera")
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingBodyCameraSequence.decide.value
@@ -143,7 +142,7 @@ class ActionSequence():
                     current_sequence = ParkingForkCameraSequence.changingtheta.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingForkCameraSequence.changingtheta.value):
-                self.is_sequence_finished = self.action.fnSeqChangingtheta(self.visual_servoing_action_server.forkcamera_Changingtheta_threshold)
+                self.is_sequence_finished = self.action.fnSeqChangingtheta(self.visual_servoing_action_server.forkcamera_Changingtheta_threshold, "forkcamera")
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingForkCameraSequence.decide.value

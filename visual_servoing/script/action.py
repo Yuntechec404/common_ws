@@ -157,23 +157,26 @@ class Action():
             self.cmd_vel.fnStop()
             return True
         
-    def fnSeqChangingtheta(self, threshod): #旋轉到marker的theta值為0, threshod為角度誤差值
+    def fnSeqChangingtheta(self, threshod, object_name): #旋轉到marker的theta值為0, threshod為角度誤差值
         self.SpinOnce()
         Kp = 0.1
-        # self.marker_2d_theta= self.TrustworthyMarker2DTheta(1)
-        # print("desired_angle_turn", self.marker_2d_theta)
-        # print("threshod", threshod)
-        if abs(self.marker_2d_theta) < threshod  :
-            self.cmd_vel.fnStop()
-            if self.check_wait_time > 5 :
-                self.check_wait_time = 0
-                return True
+        if self.TFConfidence(object_name):
+            # self.marker_2d_theta= self.TrustworthyMarker2DTheta(1)
+            # print("desired_angle_turn", self.marker_2d_theta)
+            # print("threshod", threshod)
+            if abs(self.marker_2d_theta) < threshod  :
+                self.cmd_vel.fnStop()
+                if self.check_wait_time > 5 :
+                    self.check_wait_time = 0
+                    return True
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
+                    return False
             else:
-                self.check_wait_time =self.check_wait_time  +1
+                self.cmd_vel.fnTurn(Kp, self.marker_2d_theta)
+                self.check_wait_time =0
                 return False
         else:
-            self.cmd_vel.fnTurn(Kp, self.marker_2d_theta)
-            self.check_wait_time =0
             return False
         
     def TrustworthyMarker2DTheta(self, duration): #用於計算marker的theta值再duration(取樣時間)中的平均值，避免在抖動的marker的theta值不穩定, 並且去除一個標準差外的極端值
@@ -199,28 +202,30 @@ class Action():
         # print("mean", statistics.mean(clean_list))
         return statistics.median(clean_list) 
     
-    def fnSeqChangingDirection(self, threshod): #旋轉到marker的y值為0(叉車正對marker)), threshod為角度誤差值
+    def fnSeqChangingDirection(self, threshod, object_name): #旋轉到marker的y值為0(叉車正對marker)), threshod為角度誤差值
         self.SpinOnce()
         Kp = 0.3
         desired_angle_turn = math.atan2(self.marker_2d_pose_y, self.marker_2d_pose_x)
-        
-        if desired_angle_turn <0:
-            desired_angle_turn = desired_angle_turn + math.pi
-        else:
-            desired_angle_turn = desired_angle_turn - math.pi
-
-        self.cmd_vel.fnTurn(Kp, desired_angle_turn)
-        
-        if abs(desired_angle_turn) < threshod  :
-            self.cmd_vel.fnStop()
-            if self.check_wait_time > 10 :
-                self.check_wait_time = 0
-                return True
+        if self.TFConfidence(object_name):
+            if desired_angle_turn <0:
+                desired_angle_turn = desired_angle_turn + math.pi
             else:
-                self.check_wait_time =self.check_wait_time  +1
+                desired_angle_turn = desired_angle_turn - math.pi
+
+            self.cmd_vel.fnTurn(Kp, desired_angle_turn)
+            
+            if abs(desired_angle_turn) < threshod  :
+                self.cmd_vel.fnStop()
+                if self.check_wait_time > 10 :
+                    self.check_wait_time = 0
+                    return True
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
+                    return False
+            else:
+                self.check_wait_time =0
                 return False
         else:
-            self.check_wait_time =0
             return False
     
     def fnSeqMovingNearbyParkingLot(self, desired_dist_threshold): #如果desired_dist的值小於desired_dist_threshold, 則不執行此動作
@@ -327,35 +332,31 @@ class Action():
     
     def fnSeqParking(self, parking_dist, kp, object_name):
         self.SpinOnce()
-        if object_name == "forkcamera":
-            if (not self.detectionConfidence.pallet_detection) or self.detectionConfidence.pallet_confidence < self.TestAction.confidence_minimum:
-                return False
-        elif object_name == "bodycamera" and (not self.TestAction.shelf_format):
-            if (not self.detectionConfidence.shelf_detection) or self.detectionConfidence.shelf_confidence < self.TestAction.confidence_minimum:
-                return False
-            
         desired_angle_turn = math.atan2(self.marker_2d_pose_y - 0, self.marker_2d_pose_x - 0)
-        if desired_angle_turn <0:
-            desired_angle_turn = desired_angle_turn + math.pi
-        else:
-            desired_angle_turn = desired_angle_turn - math.pi
-        self.cmd_vel.fnTrackMarker(desired_angle_turn, kp)
-        if (abs(self.marker_2d_pose_x) < parking_dist)  :
-            self.cmd_vel.fnStop()
-            if self.check_wait_time > 10:
-                self.check_wait_time = 0
-                return True
+        if self.TFConfidence(object_name):
+            if desired_angle_turn <0:
+                desired_angle_turn = desired_angle_turn + math.pi
             else:
-                self.check_wait_time =self.check_wait_time  +1
-        elif (abs(self.marker_2d_pose_x) < parking_dist) and self.check_wait_time:
-            self.cmd_vel.fnStop()
-            if self.check_wait_time > 10:
-                self.check_wait_time = 0
-                return True
+                desired_angle_turn = desired_angle_turn - math.pi
+            self.cmd_vel.fnTrackMarker(desired_angle_turn, kp)
+            if (abs(self.marker_2d_pose_x) < parking_dist)  :
+                self.cmd_vel.fnStop()
+                if self.check_wait_time > 10:
+                    self.check_wait_time = 0
+                    return True
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
+            elif (abs(self.marker_2d_pose_x) < parking_dist) and self.check_wait_time:
+                self.cmd_vel.fnStop()
+                if self.check_wait_time > 10:
+                    self.check_wait_time = 0
+                    return True
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
             else:
-                self.check_wait_time =self.check_wait_time  +1
+                self.check_wait_time =0
+                return False
         else:
-            self.check_wait_time =0
             return False
         
     def fnForkUpdown(self, desired_updownposition):#0~2.7
@@ -382,7 +383,19 @@ class Action():
             return True
         else:
             return False
-        
+
+    def TFConfidence(self, object_name):#判斷TF是否可信
+        self.SpinOnce_confidence()
+        if object_name == "forkcamera":
+            if (not self.detectionConfidence.pallet_detection) or self.detectionConfidence.pallet_confidence < self.TestAction.confidence_minimum:
+                self.cmd_vel.fnStop()
+                return False
+        elif object_name == "bodycamera" and (not self.TestAction.shelf_format):
+            if (not self.detectionConfidence.shelf_detection) or self.detectionConfidence.shelf_confidence < self.TestAction.confidence_minimum:
+                self.cmd_vel.fnStop()
+                return False
+        return True
+
 class cmd_vel():
     def __init__(self, TestAction):
         self.pub_cmd_vel = TestAction.cmd_vel_pub
