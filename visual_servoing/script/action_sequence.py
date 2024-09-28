@@ -109,10 +109,12 @@ class ActionSequence():
                     self.is_sequence_finished = False
 
             elif(current_sequence == ParkingBodyCameraSequence.stop.value):
+                self.visual_servoing_action_server.fnDetectionAllowed("not_allowed","not_allowed")  # fnDetectionAllowed(self, shelf_string, pallet_string)
                 return
             
             else:
                 self.visual_servoing_action_server.get_logger().info('Error: {0} does not exist'.format(current_sequence))
+                self.visual_servoing_action_server.fnDetectionAllowed("not_allowed","not_allowed")  # fnDetectionAllowed(self, shelf_string, pallet_string)
                 return
             
     def parking_forkcamera(self, goal_handle, layer):
@@ -130,6 +132,7 @@ class ActionSequence():
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.forkcamera_parking_fork_layer2)
                 else:
                     self.visual_servoing_action_server.get_logger().info('Layer is not defined')
+                    self.visual_servoing_action_server.fnDetectionAllowed("not_allowed","not_allowed")  # fnDetectionAllowed(self, shelf_string, pallet_string)
                     return
                 
                 if self.is_sequence_finished == True:
@@ -166,10 +169,12 @@ class ActionSequence():
                     self.is_sequence_finished = False
 
             elif(current_sequence == ParkingForkCameraSequence.stop.value):
+                self.visual_servoing_action_server.fnDetectionAllowed("not_allowed","not_allowed")  # fnDetectionAllowed(self, shelf_string, pallet_string)
                 return
             
             else:
                 self.visual_servoing_action_server.get_logger().info('Error: {0} does not exist'.format(current_sequence))
+                self.visual_servoing_action_server.fnDetectionAllowed("not_allowed","not_allowed")  # fnDetectionAllowed(self, shelf_string, pallet_string)
                 return
 
     def raise_pallet(self, goal_handle, layer):
