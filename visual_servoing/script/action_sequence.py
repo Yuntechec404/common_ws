@@ -67,6 +67,7 @@ class ActionSequence():
                     self.is_sequence_finished = False
             
             elif(current_sequence == ParkingBodyCameraSequence.changing_direction.value):
+                self.visual_servoing_action_server.fnDetectionAllowed("allowed","not_allowed")  # fnDetectionAllowed(self, shelf_string, pallet_string)
                 self.is_sequence_finished = self.action.fnSeqChangingDirection(self.visual_servoing_action_server.bodycamera_ChangingDirection_threshold, "bodycamera")
 
                 if self.is_sequence_finished == True:
@@ -136,6 +137,7 @@ class ActionSequence():
                     self.is_sequence_finished = False
             
             elif(current_sequence == ParkingForkCameraSequence.parking.value):
+                self.visual_servoing_action_server.fnDetectionAllowed("not_allowed","allowed")  # fnDetectionAllowed(self, shelf_string, pallet_string)
                 self.is_sequence_finished = self.action.fnSeqParking(self.visual_servoing_action_server.forkcamera_parking_stop, 1.0, "forkcamera")
                 
                 if self.is_sequence_finished == True:
@@ -175,6 +177,7 @@ class ActionSequence():
 
         while not goal_handle.is_cancel_requested:
             time.sleep(0.1)
+            self.visual_servoing_action_server.fnDetectionAllowed("not_allowed","not_allowed")  # fnDetectionAllowed(self, shelf_string, pallet_string)
             feedback = str(RaisePalletSequence(current_sequence))
             self.visual_servoing_action_server.get_logger().info('Feedback: {0}'.format(feedback))
 
@@ -228,7 +231,7 @@ class ActionSequence():
 
         while not goal_handle.is_cancel_requested:
             time.sleep(0.1)
-
+            self.visual_servoing_action_server.fnDetectionAllowed("not_allowed","not_allowed")  # fnDetectionAllowed(self, shelf_string, pallet_string)
             if(current_sequence == DropPalletSequence.init_fork.value):
                 if layer == 1.0:
                     self.is_sequence_finished = self.action.fnForkUpdown(self.visual_servoing_action_server.drop_pallet_fork_init_layer1)
@@ -280,6 +283,7 @@ class ActionSequence():
         self.is_sequence_finished = False
         while not goal_handle.is_cancel_requested:
             time.sleep(0.1)
+            self.visual_servoing_action_server.fnDetectionAllowed("not_allowed","not_allowed")  # fnDetectionAllowed(self, shelf_string, pallet_string)
             feedback = str(FrontSequence(current_sequence))
             self.visual_servoing_action_server.get_logger().info('Feedback: {0}'.format(feedback))
 
@@ -296,6 +300,7 @@ class ActionSequence():
         self.is_sequence_finished = False
         while not goal_handle.is_cancel_requested:
             time.sleep(0.1)
+            self.visual_servoing_action_server.fnDetectionAllowed("not_allowed","not_allowed")  # fnDetectionAllowed(self, shelf_string, pallet_string)
             feedback = str(TurnSequence(current_sequence))
             self.visual_servoing_action_server.get_logger().info('Feedback: {0}'.format(feedback))
 

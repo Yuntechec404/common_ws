@@ -5,6 +5,7 @@ import tf_transformations # using euler_from_quaternion
 # message
 from visual_servoing.action import VisualServoing
 from geometry_msgs.msg import PoseArray, Pose, Twist
+from std_msgs.msg import String
 from nav_msgs.msg import Odometry
 from forklift_driver.msg import Meteorcar
 from visp_megapose.msg import Confidence
@@ -40,6 +41,17 @@ class VisualServoingActionServer(Node):
         self.action_sequence = ActionSequence(self)
         
         self._action_server = ActionServer(self, VisualServoing, 'VisualServoing', self.execute_callback, callback_group=self.callback_group2)
+        self.fnDetectionAllowed("not_allowed","not_allowed")
+        
+    def fnDetectionAllowed(self, shelf_string, pallet_string):
+        shelf_msg = String()
+        shelf_msg.data = shelf_string
+        self.shelf_detection_allowed_pub.publish(shelf_msg)
+        
+        pallet_msg = String()
+        pallet_msg.data = pallet_string
+        self.pallet_detection_allowed_pub.publish(pallet_msg)
+        # self.get_logger().info("shelf_msg = {}, pallet_msg = {}".format(shelf_msg, pallet_msg))
 
     async def execute_callback(self, goal_handle):
         self.get_logger().info('Received goal: Command={}, layer_dist={}'.format(goal_handle.request.command, goal_handle.request.layer_dist))
@@ -239,10 +251,12 @@ class VisualServoingActionServer(Node):
         self.pallet_confidence_sub = self.create_subscription(Confidence, self.pallet_topic + "_confidence", self.cbPalletConfidence, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", 1, callback_group=self.callback_group)
         self.fork_pub = self.create_publisher(Meteorcar, "/cmd_fork", 1, callback_group=self.callback_group)
+        self.pallet_detection_allowed_pub = self.create_publisher(String, self.pallet_topic + "_detection_allowed", 1, callback_group=self.callback_group)
         if(self.shelf_format == True):
             self.shelf_sub = self.create_subscription(PoseArray, self.shelf_topic, self.shelf_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         else:
             self.shelf_confidence_sub = self.create_subscription(Confidence, self.shelf_topic + "_confidence", self.cbShelfConfidence, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
+            self.shelf_detection_allowed_pub = self.create_publisher(String, self.shelf_topic + "_detection_allowed", 1, callback_group=self.callback_group)
             self.shelf_sub = self.create_subscription(Pose, self.shelf_topic, self.shelf_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
 
     def log_info(self):
