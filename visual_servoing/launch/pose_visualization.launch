@@ -2,7 +2,7 @@
   <node pkg="visual_servoing" exec="pose_visualization.py" name="pose_visualization" output="screen">
 	  <!--subscriber topic parameter setting/-->
     <param name="odom_topic" value="/wheel_odom" /><!--里程計 Topic/-->
-    <param name="apriltag_topic" value="/reck" /><!--AprilTag的 Topic/-->
+    <param name="apriltag_topic" value="/shelf" /><!--AprilTag的 Topic/-->
     <param name="pallet_topic" value="/pallet" /><!--棧板或目標的 Topic/-->
     <param name="forkpose_topic" value="/forklift_pose" /><!--牙叉編碼器 Topic/-->
     <param name="shelf_format" value="False" /><!--貨架的格式 (True: AprilTag, False: megapose)/-->

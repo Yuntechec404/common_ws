@@ -3,6 +3,7 @@
 import math # using math.pi
 import tf_transformations # using euler_from_quaternion
 import tkinter as tk # using Tkinter to visualize pose
+from tkinter import font as tkfont # using Tkinter to Text font
 # message
 from geometry_msgs.msg import PoseArray, Pose
 from nav_msgs.msg import Odometry
@@ -16,6 +17,8 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup
 # The ReentrantCallbackGroup creates a group of reentrant callbacks that can be called from multiple threads.
 
+def fnCalcDistPoints(x1, x2, y1, y2):
+    return math.sqrt((x1 - x2) ** 2. + (y1 - y2) ** 2.)
 
 class PoseVisualization(Node):
     def __init__(self):
@@ -27,18 +30,27 @@ class PoseVisualization(Node):
     
         self.root = tk.Tk()
         self.root.title("Robot Visualization")
+        font = tkfont.Font(family = "Arial", size = 18)
 
-        self.robot_pose_label = tk.Label(self.root, text="Robot Pose: x=0.0, y=0.0, theta=0.0")
-        self.robot_pose_label.pack()
-        
-        self.marker_pose_label = tk.Label(self.root, text="Marker Pose: x=0.0, y=0.0, theta=0.0")
-        self.marker_pose_label.pack()
-        
-        self.pallet_pose_label = tk.Label(self.root, text="Pallet Pose: x=0.0, y=0.0, theta=0.0")
-        self.pallet_pose_label.pack()
+        self.fork_abs_pose_label = tk.Label(self.root, text="Fork Position: 0.0", font = font)
+        self.fork_abs_pose_label.pack()
 
-        self.fork_pose_label = tk.Label(self.root, text="Fork Position: 0.0")
-        self.fork_pose_label.pack()
+        self.robot_abs_pose_label = tk.Label(self.root, text="Robot Pose: x=0.0, y=0.0, theta=0.0", font = font)
+        self.robot_abs_pose_label.pack()
+        
+        self.marker_abs_pose_label = tk.Label(self.root, text=f"{self.apriltag_topic} Pose: x=0.0, y=0.0, theta=0.0", font = font)
+        self.marker_abs_pose_label.pack()
+        
+        self.pallet_abs_pose_label = tk.Label(self.root, text=f"{self.pallet_topic} Pose: x=0.0, y=0.0, theta=0.0", font = font)
+        self.pallet_abs_pose_label.pack()
+
+        tk.Label(self.root, text=f"------------------------------------------------------------", font = font).pack()
+        
+        self.marker_rel_pose_label = tk.Label(self.root, text=f"{self.apriltag_topic} Depth=0.0, Deviation angle=0.0", font = font)
+        self.marker_rel_pose_label.pack()
+        
+        self.pallet_rel_pose_label = tk.Label(self.root, text=f"{self.pallet_topic} Depth=0.0, Deviation angle=0.0", font = font)
+        self.pallet_rel_pose_label.pack()
         
         self.update_gui()
         self.root.mainloop() 
@@ -55,14 +67,20 @@ class PoseVisualization(Node):
 
     def update_gui(self):
         rclpy.spin_once(self)
+        marker_dist = fnCalcDistPoints(self.robot_2d_pose_x, self.marker_2d_pose_x, self.robot_2d_pose_y, self.marker_2d_pose_y)
+        pallet_dist = fnCalcDistPoints(self.robot_2d_pose_x, self.pallet_2d_pose_x, self.robot_2d_pose_y, self.pallet_2d_pose_y)
         self.log_info()
-        self.robot_pose_label.config(text="Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
+        self.robot_abs_pose_label.config(text="Robot Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
             self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta))
-        self.marker_pose_label.config(text="Marker Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
-            self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
-        self.pallet_pose_label.config(text="Pallet Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
-            self.pallet_2d_pose_x, self.pallet_2d_pose_y, self.pallet_2d_theta))
-        self.fork_pose_label.config(text="Fork Position: {:.3f}".format(self.updownposition))
+        self.marker_abs_pose_label.config(text="{:} Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
+            self.apriltag_topic.replace('/', ''), self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
+        self.marker_rel_pose_label.config(text="{:} Depth={:.3f}, Deviation angle={:.3f}".format(
+            self.apriltag_topic.replace('/', ''), marker_dist, self.robot_2d_theta - self.marker_2d_theta))
+        self.pallet_abs_pose_label.config(text="{:} Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(
+            self.pallet_topic.replace('/', ''), self.pallet_2d_pose_x, self.pallet_2d_pose_y, self.pallet_2d_theta))
+        self.pallet_rel_pose_label.config(text="{:} Depth={:.3f}, Deviation angle={:.3f}".format(
+            self.pallet_topic.replace('/', ''), pallet_dist, self.robot_2d_theta - self.pallet_2d_theta))
+        self.fork_abs_pose_label.config(text="Fork Position: {:.3f}".format(self.updownposition))
         self.root.after(100, self.update_gui)
 
     def init_parame(self):
@@ -156,7 +174,7 @@ class PoseVisualization(Node):
             quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
             theta = tf_transformations.euler_from_quaternion(quaternion)[1]
             self.marker_2d_pose_x = -marker_msg.position.z
-            self.marker_2d_pose_y = marker_msg.position.x 
+            self.marker_2d_pose_y = marker_msg.position.x
             self.marker_2d_theta = -theta
             self.get_logger().info("apriltag_callback Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
         except:
