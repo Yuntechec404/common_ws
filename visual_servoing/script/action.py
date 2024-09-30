@@ -32,6 +32,7 @@ class Action():
         # cmd_vel
         self.TestAction = TestAction
         self.cmd_vel = cmd_vel(TestAction)
+        self.cmd_vel.vel_state = False
         # NearbySequence
         self.NearbySequence = Enum('NearbySequence', 'initial_turn go_straight turn_right parking ')
         self.current_nearby_sequence = self.NearbySequence.initial_turn.value
@@ -64,6 +65,8 @@ class Action():
             shelf_confidence = 0.0,
             shelf_detection = False
         )
+    def vel_state_getter(self):
+        return self.cmd_vel.vel_state
 
     def SpinOnce(self):
         (self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta, \
@@ -170,11 +173,11 @@ class Action():
                     self.check_wait_time = 0
                     return True
                 else:
-                    self.check_wait_time =self.check_wait_time  +1
+                    self.check_wait_time =self.check_wait_time  + 1
                     return False
             else:
                 self.cmd_vel.fnTurn(Kp, self.marker_2d_theta)
-                self.check_wait_time =0
+                self.check_wait_time = 0
                 return False
         else:
             return False
@@ -423,15 +426,18 @@ class cmd_vel():
         self.pub_cmd_vel.publish(twist)
 
     def fnStop(self):
+        self.vel_state = False
         twist = Twist()
         self.cmd_pub(twist)
 
     def fnTurn(self, Kp=0.2, theta=0.):
+        self.vel_state = True
         twist = Twist()
         twist.angular.z = Kp * theta
         self.cmd_pub(twist)
 
     def fnGoStraight(self, Kp=0.2, v=0.):
+        self.vel_state = True
         twist = Twist()
         twist.linear.x = Kp * v
         self.cmd_pub(twist)
@@ -443,6 +449,7 @@ class cmd_vel():
 
     def fnTrackMarker(self, theta, Kp):
         # Kp = 2.0 #6.5
+        self.vel_state = True
         twist = Twist()
         twist.linear.x = -0.025
         twist.angular.z = Kp * theta

@@ -2,16 +2,16 @@
   ros__parameters:
     command_list_yaml: ['PBVS,parking_forkcamera,2.0',
     'PBVS,raise_pallet,2.0',
-    'odom,odom_turn,95.0',
+    'odom,odom_turn,92.0',
     'odom,odom_front,-4.0',
-    'odom,odom_turn,-95.0',
+    'odom,odom_turn,-92.0',
     'PBVS,parking_bodycamera,2.0',
     'PBVS,drop_pallet,2.0',
-    'odom,odom_front,-0.3',
+    ''PBVS,parking_forkcamera,2.0',
     'PBVS,raise_pallet,1.0',
-    'odom,odom_turn,-100.0',
+    'odom,odom_turn,-92.0',
     'odom,odom_front,-4.0',
-    'odom,odom_turn,95.0',
+    'odom,odom_turn,92.0',
     'PBVS,parking_bodycamera,1.0',
     'PBVS,drop_pallet,1.0']
 

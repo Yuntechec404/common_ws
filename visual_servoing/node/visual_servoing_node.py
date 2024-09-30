@@ -21,6 +21,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallb
 # The MutuallyExclusiveCallbackGroup creates a group of mutually exclusive callbacks that can be called from multiple threads.
 # 動作流程
 from action_sequence import ActionSequence
+from action import Action
 from dataclasses import dataclass
 
 @dataclass
@@ -39,6 +40,7 @@ class VisualServoingActionServer(Node):
         self.get_parameters()
         self.create_subscriber()
         self.action_sequence = ActionSequence(self)
+        self.action = Action(self)
         
         self._action_server = ActionServer(self, VisualServoing, 'VisualServoing', self.execute_callback, callback_group=self.callback_group2)
         self.fnDetectionAllowed("not_allowed","not_allowed")
@@ -121,8 +123,6 @@ class VisualServoingActionServer(Node):
         self.shelf_format = self.get_parameter('shelf_format').get_parameter_value().bool_value
         self.declare_parameter('confidence_minimum', 0.5)
         self.confidence_minimum = self.get_parameter('confidence_minimum').get_parameter_value().double_value
-        self.declare_parameter('TF_replace', 0.5)
-        self.TF_replace = self.get_parameter('TF_replace').get_parameter_value().double_value
 
         self.get_logger().info("Get subscriber topic parameter")
         self.get_logger().info("odom_topic: {}, type: {}".format(self.odom_topic, type(self.odom_topic)))
@@ -131,7 +131,6 @@ class VisualServoingActionServer(Node):
         self.get_logger().info("forkpose_topic: {}, type: {}".format(self.forkpose_topic, type(self.forkpose_topic)))
         self.get_logger().info("shelf_format: {}, type: {}".format(self.shelf_format, type(self.shelf_format)))
         self.get_logger().info("confidence_minimum: {}, type: {}".format(self.confidence_minimum, type(self.confidence_minimum)))
-        self.get_logger().info("TF_replace: {}, type: {}".format(self.TF_replace, type(self.TF_replace)))
 
         # get bodycamera parking parameter
         self.declare_parameter('bodycamera_tag_offset_x', 0.0)
@@ -302,6 +301,10 @@ class VisualServoingActionServer(Node):
         self.previous_robot_2d_theta = self.robot_2d_theta
 
         self.robot_2d_theta = self.total_robot_2d_theta
+        # if self.action.vel_state_getter():
+        #     self.get_logger().info("Robot Moving")
+        # else :
+        #     self.get_logger().info("Robot Stop")
 
     def shelf_callback(self, msg):
         # self.get_logger().info("Shelf callback")
