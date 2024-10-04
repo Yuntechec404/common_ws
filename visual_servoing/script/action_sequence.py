@@ -179,6 +179,7 @@ class ActionSequence():
 
     def raise_pallet(self, goal_handle, layer):
         current_sequence = RaisePalletSequence.init_fork.value
+        time.sleep(5)
 
         while not goal_handle.is_cancel_requested:
             time.sleep(0.1)
@@ -233,6 +234,7 @@ class ActionSequence():
               
     def drop_pallet(self, goal_handle, layer):
         current_sequence = DropPalletSequence.init_fork.value
+        time.sleep(5)
 
         while not goal_handle.is_cancel_requested:
             time.sleep(0.1)
