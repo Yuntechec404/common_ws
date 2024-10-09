@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(visual_servoing)
+project(kalman_filter)
 
 find_package(ament_cmake_auto REQUIRED)
 find_package(ament_cmake REQUIRED)
@@ -17,26 +17,19 @@ find_package(sensor_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2 REQUIRED)
 # 3rd party
-find_package(serial REQUIRED)
-
-# message
-find_package(rosidl_default_generators REQUIRED)
-rosidl_generate_interfaces(${PROJECT_NAME}
-  "action/VisualServoing.action"
-  DEPENDENCIES std_msgs
-)
+find_package(visp_bridge REQUIRED)
+find_package(VISP REQUIRED COMPONENTS visp_core visp_detection dnn_tracker gui io)
+find_package(cv_bridge REQUIRED)
 
 install(PROGRAMS
-  node/visual_servoing_node.py
-  node/pose_visualization.py
-  script/action_sequence.py
-  script/action.py
+  node/kalman_filter_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(
-    DIRECTORY launch
-    DESTINATION share/${PROJECT_NAME}
+install(DIRECTORY
+  launch
+  param
+  DESTINATION share/${PROJECT_NAME}/
 )
 
 ament_export_dependencies(rosidl_default_runtime)

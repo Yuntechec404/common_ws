@@ -1,0 +1,8 @@
+KalmanFilterNode:
+  ros__parameters:
+    process_variance : 2.5
+    measurement_variance : 0.2
+    initial_state : [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    initial_uncertainty : 20.0
+    object : "/cube"
+    csv_save : false

@@ -7,6 +7,13 @@
     <param name="forkpose_topic" value="/forklift_pose" /><!--牙叉編碼器 Topic/-->
     <param name="shelf_format" value="False" /><!--貨架的格式 (True: AprilTag, False: megapose)/-->
     <param name="confidence_minimum" value="0.7" /><!--megapose信心值低於它停止動作/-->
+
+    <!-- kalman filter parameter setting-->
+    <param name="kalman_enble" value = "True" /><!-- -->
+    <param name="process_variance" value = "2.5" /><!-- 越大，系統模型（預測）中的不確定性越大，濾波器將更傾向於信任測量值-->
+    <param name="measurement_variance" value = "0.2" /><!--測量設備中的雜訊大小。越大，濾波器越少依賴感測器的測量值-->
+    <param name="initial_state" value = "[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]" /><!--[x, vx, y, vy, z, vz, qx, qy, qz, qw]-->
+    <param name="initial_uncertainty" value = "20.0" />  <!--越大，對初始狀態的信心越模糊-->
     
     <!--bodycamera parking parameter setting-->
     <param name="bodycamera_tag_offset_x"  value = "0.0" /><!--對位目標點與tag的左右偏移量(有時候相機並不會正對著tag), TODO 此功能在本版本中尚未實現/-->
