@@ -40,7 +40,6 @@ class VisualServoingActionServer(Node):
         self.init_parame()
         self.get_parameters()
         self.create_subscriber()
-        self.init_kalman_filter()
         self.action_sequence = ActionSequence(self)
         self.action = Action(self)
         
@@ -119,6 +118,8 @@ class VisualServoingActionServer(Node):
         self.shelf_topic = self.get_parameter('shelf_topic').get_parameter_value().string_value
         self.declare_parameter('pallet_topic', '/pallet_detection')
         self.pallet_topic = self.get_parameter('pallet_topic').get_parameter_value().string_value
+        self.declare_parameter('object_filter', False)
+        self.object_filter = self.get_parameter('object_filter').get_parameter_value().bool_value
         self.declare_parameter('forkpose_topic', '/fork_pose')
         self.forkpose_topic = self.get_parameter('forkpose_topic').get_parameter_value().string_value
         self.declare_parameter('shelf_format', True)
@@ -130,27 +131,10 @@ class VisualServoingActionServer(Node):
         self.get_logger().info("odom_topic: {}, type: {}".format(self.odom_topic, type(self.odom_topic)))
         self.get_logger().info("shelf_topic: {}, type: {}".format(self.shelf_topic, type(self.shelf_topic)))
         self.get_logger().info("pallet_topic: {}, type: {}".format(self.pallet_topic, type(self.pallet_topic)))
+        self.get_logger().info("object_filter: {}, type: {}".format(self.object_filter, type(self.object_filter)))
         self.get_logger().info("forkpose_topic: {}, type: {}".format(self.forkpose_topic, type(self.forkpose_topic)))
         self.get_logger().info("shelf_format: {}, type: {}".format(self.shelf_format, type(self.shelf_format)))
         self.get_logger().info("confidence_minimum: {}, type: {}".format(self.confidence_minimum, type(self.confidence_minimum)))
-
-        # get kalman filter parameter
-        self.declare_parameter('kalman_enble', True)
-        self.kalman_enble = self.get_parameter('kalman_enble').get_parameter_value().bool_value
-        self.declare_parameter('process_variance', 2.5)
-        self.process_variance = self.get_parameter('process_variance').get_parameter_value().double_value
-        self.declare_parameter('measurement_variance', 0.2)
-        self.measurement_variance = self.get_parameter('measurement_variance').get_parameter_value().double_value
-        self.declare_parameter('initial_state', [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-        self.initial_state = self.get_parameter('initial_state').get_parameter_value().double_array_value
-        self.declare_parameter('initial_uncertainty', 10.0)
-        self.initial_uncertainty = self.get_parameter('initial_uncertainty').get_parameter_value().double_value
-
-        self.get_logger().info("kalman_enble: {}, type: {}".format(self.kalman_enble, type(self.kalman_enble)))
-        self.get_logger().info("process_variance: {}, type: {}".format(self.process_variance, type(self.process_variance)))
-        self.get_logger().info("measurement_variance: {}, type: {}".format(self.measurement_variance, type(self.measurement_variance)))
-        self.get_logger().info("initial_state: {}, type: {}".format(self.initial_state, type(self.initial_state)))
-        self.get_logger().info("initial_uncertainty: {}, type: {}".format(self.initial_uncertainty, type(self.initial_uncertainty)))
 
         # get bodycamera parking parameter
         self.declare_parameter('bodycamera_tag_offset_x', 0.0)
@@ -264,35 +248,26 @@ class VisualServoingActionServer(Node):
         self.get_logger().info("drop_pallet_navigation_helght: {}, type: {}".format(self.drop_pallet_navigation_helght, type(self.drop_pallet_navigation_helght)))
 
     def create_subscriber(self):
+        if(self.object_filter):
+            pallet = self.pallet_topic + "_filtered"
+            shelf = self.shelf_topic + "_filtered"
+        else:
+            pallet = self.pallet_topic
+            shelf = self.shelf_topic
         self.odom_sub = self.create_subscription(Odometry, self.odom_topic, self.odom_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
-        self.pallet_sub = self.create_subscription(Pose, self.pallet_topic, self.pallet_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
+        self.pallet_sub = self.create_subscription(Pose, pallet, self.pallet_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         self.forkpose_sub = self.create_subscription(Meteorcar, self.forkpose_topic, self.cbGetforkpos, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         self.pallet_confidence_sub = self.create_subscription(Confidence, self.pallet_topic + "_confidence", self.cbPalletConfidence, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", 1, callback_group=self.callback_group)
         self.fork_pub = self.create_publisher(Meteorcar, "/cmd_fork", 1, callback_group=self.callback_group)
         self.pallet_detection_allowed_pub = self.create_publisher(String, self.pallet_topic + "_detection_allowed", 1, callback_group=self.callback_group)
         
-        if self.kalman_enble == True:
-            self.pallet_kalman_pub = self.create_publisher(Pose, f"{self.pallet_topic}_filtered", 1, callback_group=self.callback_group)
-            if(self.shelf_format == False):
-                self.shelf_kalman_pub = self.create_publisher(Pose, f"{self.shelf_topic}_filtered", 1, callback_group=self.callback_group)
-
         if(self.shelf_format == True):
             self.shelf_sub = self.create_subscription(PoseArray, self.shelf_topic, self.shelf_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         else:
             self.shelf_confidence_sub = self.create_subscription(Confidence, self.shelf_topic + "_confidence", self.cbShelfConfidence, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
             self.shelf_detection_allowed_pub = self.create_publisher(String, self.shelf_topic + "_detection_allowed", 1, callback_group=self.callback_group)
-            self.shelf_sub = self.create_subscription(Pose, self.shelf_topic, self.shelf_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
-
-    def init_kalman_filter(self):
-        self.check_wait_time = 0
-
-        self.kf = KalmanFilter_(
-            self.process_variance, 
-            self.measurement_variance,  
-            self.initial_state, 
-            self.initial_uncertainty
-        )
+            self.shelf_sub = self.create_subscription(Pose, shelf, self.shelf_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
 
     def log_info(self):
         rclpy.spin_once(self)
@@ -349,9 +324,7 @@ class VisualServoingActionServer(Node):
                 if(self.shelf_sub.msg_type == PoseArray):
                     marker_msg = msg.poses[0]
                 else:
-                    if self.kalman_enble:
-                        msg_filter = self.kalman_execute(msg, 'shelf')
-                    marker_msg = msg_filter
+                    marker_msg = msg
                 quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
                 theta = tf_transformations.euler_from_quaternion(quaternion)[1]
                 self.marker_2d_pose_x = -marker_msg.position.z
@@ -367,9 +340,7 @@ class VisualServoingActionServer(Node):
         # self.get_logger().info("Pallet callback")
         try:
             if self.shelf_or_pallet == False:
-                if self.kalman_enble:
-                    msg_filter = self.kalman_execute(msg, 'pallet')
-                marker_msg = msg_filter
+                marker_msg = msg
                 quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
                 theta = tf_transformations.euler_from_quaternion(quaternion)[1]
                 self.marker_2d_pose_x = -marker_msg.position.z
@@ -392,94 +363,6 @@ class VisualServoingActionServer(Node):
     def cbShelfConfidence(self, msg):
         self.detectionConfidence.shelf_confidence = msg.object_confidence
         self.detectionConfidence.shelf_detection = msg.model_detection
-
-    def kalman_execute(self, msg, object_name):
-        # timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
-
-        # 收到的測量數據
-        measurement = [
-            msg.position.x,
-            msg.position.y,
-            msg.position.z,
-            msg.orientation.x,
-            msg.orientation.y,
-            msg.orientation.z,
-            msg.orientation.w
-        ]
-
-        # 濾波器的預測和更新
-        self.kf.predict()
-        self.kf.update(measurement)
-
-        # 得到經過濾波的狀態
-        filtered_state = self.kf.get_state()
-
-        # 構建過濾後的 Pose 消息
-        filtered_pose = Pose()
-        filtered_pose.position.x = filtered_state[0]  # x
-        filtered_pose.position.y = filtered_state[2]  # y
-        filtered_pose.position.z = filtered_state[4]  # z
-        filtered_pose.orientation.x = filtered_state[6]
-        filtered_pose.orientation.y = filtered_state[7]
-        filtered_pose.orientation.z = filtered_state[8]
-        filtered_pose.orientation.w = filtered_state[9]
-
-        # 發布過濾後的 Pose
-        if object_name == 'pallet':
-            self.pallet_kalman_pub.publish(filtered_pose)
-        elif object_name == 'shelf':
-            self.shelf_kalman_pub.publish(filtered_pose)
-        return filtered_pose
-
-class KalmanFilter_:
-    def __init__(self, process_variance, measurement_variance, initial_state, initial_uncertainty):
-        if len(initial_state) != 10:
-            raise ValueError("initial_state 必須包含10個元素")
-        self.state = np.array(initial_state)
-        self.uncertainty = np.eye(len(self.state)) * initial_uncertainty
-        self.process_variance = process_variance
-        self.measurement_variance = measurement_variance
-        
-        # 狀態轉移矩陣
-        self.A = np.eye(len(self.state))
-        self.A[0, 1] = 1  # x 和速度 vx
-        self.A[2, 3] = 1  # y 和速度 vy
-        self.A[4, 5] = 1  # z 和速度 vz
-
-        # 測量矩陣
-        self.H = np.zeros((7, 10))
-        self.H[0, 0] = 1  # x
-        self.H[1, 2] = 1  # y
-        self.H[2, 4] = 1  # z
-        self.H[3, 6] = 1  # qx
-        self.H[4, 7] = 1  # qy
-        self.H[5, 8] = 1  # qz
-        self.H[6, 9] = 1  # qw
-
-        # 過程噪聲和測量噪聲
-        self.Q = np.eye(len(self.state)) * self.process_variance
-        self.R = np.eye(7) * self.measurement_variance
-
-    def predict(self):
-        self.state = self.A @ self.state
-        self.uncertainty = self.A @ self.uncertainty @ self.A.T + self.Q
-
-    def update(self, measurement):
-        z = np.array(measurement)
-        y = z - self.H @ self.state  # 殘差
-        S = self.H @ self.uncertainty @ self.H.T + self.R
-        K = self.uncertainty @ self.H.T @ np.linalg.inv(S)
-
-        self.state = self.state + K @ y
-        self.uncertainty = (np.eye(len(self.state)) - K @ self.H) @ self.uncertainty
-
-        # 歸一化四元数
-        quaternion = self.state[6:10]  # 取 qx, qy, qz, qw
-        quaternion /= np.linalg.norm(quaternion)  # 歸一化
-        self.state[6:10] = quaternion
-
-    def get_state(self):
-        return self.state
 
 def main(args=None):
     rclpy.init(args=args)

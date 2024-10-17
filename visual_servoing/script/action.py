@@ -162,7 +162,7 @@ class Action():
         
     def fnSeqChangingtheta(self, threshod, object_name): #旋轉到marker的theta值為0, threshod為角度誤差值
         self.SpinOnce()
-        Kp = 0.1
+        Kp = 0.05
         if self.TFConfidence(object_name):
             # self.marker_2d_theta= self.TrustworthyMarker2DTheta(1)
             # print("desired_angle_turn", self.marker_2d_theta)

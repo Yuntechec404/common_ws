@@ -81,7 +81,7 @@ class ActionSequence():
                     current_sequence = ParkingBodyCameraSequence.parking.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingBodyCameraSequence.parking.value):
-                self.is_sequence_finished = self.action.fnSeqParking(self.visual_servoing_action_server.bodycamera_parking_stop, 1.0, "bodycamera")
+                self.is_sequence_finished = self.action.fnSeqParking(self.visual_servoing_action_server.bodycamera_parking_stop, 0.5, "bodycamera")
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingBodyCameraSequence.changingtheta.value
@@ -141,7 +141,7 @@ class ActionSequence():
             
             elif(current_sequence == ParkingForkCameraSequence.parking.value):
                 self.visual_servoing_action_server.fnDetectionAllowed("not_allowed","allowed")  # fnDetectionAllowed(self, shelf_string, pallet_string)
-                self.is_sequence_finished = self.action.fnSeqParking(self.visual_servoing_action_server.forkcamera_parking_stop, 1.0, "forkcamera")
+                self.is_sequence_finished = self.action.fnSeqParking(self.visual_servoing_action_server.forkcamera_parking_stop, 0.5, "forkcamera")
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingForkCameraSequence.changingtheta.value
