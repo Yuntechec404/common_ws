@@ -169,7 +169,7 @@ class Action():
             # print("threshod", threshod)
             if abs(self.marker_2d_theta) < threshod  :
                 self.cmd_vel.fnStop()
-                if self.check_wait_time > 5 :
+                if self.check_wait_time > 10 :
                     self.check_wait_time = 0
                     return True
                 else:
@@ -260,7 +260,7 @@ class Action():
 
             if abs(desired_angle_turn) < 0.03:
                 self.cmd_vel.fnStop()
-                if self.check_wait_time >10:
+                if self.check_wait_time >15:
                     self.check_wait_time = 0
                     self.current_nearby_sequence = self.NearbySequence.go_straight.value
                     self.is_triggered = False
@@ -268,7 +268,7 @@ class Action():
                     self.check_wait_time =self.check_wait_time +1
             elif abs(desired_angle_turn) < 0.045 and self.check_wait_time :
                 self.cmd_vel.fnStop()
-                if self.check_wait_time > 10:
+                if self.check_wait_time > 15:
                     self.check_wait_time = 0
                     self.current_nearby_sequence = self.NearbySequence.go_straight.value
                     self.is_triggered = False
@@ -344,14 +344,14 @@ class Action():
             self.cmd_vel.fnTrackMarker(desired_angle_turn, kp)
             if (abs(self.marker_2d_pose_x) < parking_dist)  :
                 self.cmd_vel.fnStop()
-                if self.check_wait_time > 10:
+                if self.check_wait_time > 15:
                     self.check_wait_time = 0
                     return True
                 else:
                     self.check_wait_time =self.check_wait_time  +1
             elif (abs(self.marker_2d_pose_x) < parking_dist) and self.check_wait_time:
                 self.cmd_vel.fnStop()
-                if self.check_wait_time > 10:
+                if self.check_wait_time > 15:
                     self.check_wait_time = 0
                     return True
                 else:
@@ -451,7 +451,7 @@ class cmd_vel():
         # Kp = 2.0 #6.5
         self.vel_state = True
         twist = Twist()
-        twist.linear.x = -0.025
+        twist.linear.x = -0.015
         twist.angular.z = Kp * theta
         self.cmd_pub(twist)
 

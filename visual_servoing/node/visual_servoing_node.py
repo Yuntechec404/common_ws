@@ -249,8 +249,8 @@ class VisualServoingActionServer(Node):
 
     def create_subscriber(self):
         if(self.object_filter):
-            pallet = self.pallet_topic + "_filtered"
-            shelf = self.shelf_topic + "_filtered"
+            pallet = self.pallet_topic + "_filter"
+            shelf = self.shelf_topic + "_filter"
         else:
             pallet = self.pallet_topic
             shelf = self.shelf_topic
