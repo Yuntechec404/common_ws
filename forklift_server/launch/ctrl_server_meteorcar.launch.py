@@ -12,8 +12,8 @@ def generate_launch_description():
         
     node = Node(
         package='forklift_server',
-        executable='ctrl_server.py',
-        name='ctrl_server',
+        executable='ctrl_server_.py',
+        name='ctrl_server_',
         parameters=[param]
     )
 

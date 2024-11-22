@@ -13,7 +13,8 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(visual_servoing REQUIRED)
+find_package(slam_toolbox REQUIRED)
+# find_package(visual_servoing REQUIRED)
 # tf
 find_package(tf2_ros REQUIRED)
 find_package(tf2 REQUIRED)
@@ -29,6 +30,7 @@ find_package(tf2 REQUIRED)
 
 install(PROGRAMS
   node/ctrl_server.py
+  node/ctrl_server_.py
   node/test_node.py
   DESTINATION lib/${PROJECT_NAME}
 )

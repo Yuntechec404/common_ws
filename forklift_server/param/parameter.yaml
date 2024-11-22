@@ -1,19 +1,24 @@
 /**:
   ros__parameters:
-    command_list_yaml: ['PBVS,parking_forkcamera,2.0',
+    # command_list_yaml: ['PBVS,parking_forkcamera,2.0',
+    # 'PBVS,raise_pallet,2.0',
+    # 'odom,odom_turn,91.0',
+    # 'odom,odom_front,-2.0',
+    # 'odom,odom_turn,-91.0',
+    # 'PBVS,parking_bodycamera,2.0',
+    # 'PBVS,drop_pallet,2.0',
+    # 'odom,odom_front,-0.33',
+    # 'PBVS,raise_pallet,1.0',
+    # 'odom,odom_turn,-92.0',
+    # 'odom,odom_front,-2.0',
+    # 'odom,odom_turn,90.0',
+    # 'PBVS,parking_bodycamera,1.0',
+    # 'PBVS,drop_pallet,1.0']
+
+    command_list_yaml: ['TopologyMap, P1, 0.0',
     'PBVS,raise_pallet,2.0',
-    'odom,odom_turn,91.0',
-    'odom,odom_front,-2.0',
-    'odom,odom_turn,-91.0',
-    'PBVS,parking_bodycamera,2.0',
-    'PBVS,drop_pallet,2.0',
-    'odom,odom_front,-0.33',
-    'PBVS,raise_pallet,1.0',
-    'odom,odom_turn,-92.0',
-    'odom,odom_front,-2.0',
-    'odom,odom_turn,90.0',
-    'PBVS,parking_bodycamera,1.0',
-    'PBVS,drop_pallet,1.0']
+    'TopologyMap, P2',
+    'TopologyMap, P1']
 
     # command [PBVS,parking_forkcamera,layer]   使用牙叉相機對位棧板
     # command [PBVS,parking_bodycamera,layer]   使用車體相機對位貨架

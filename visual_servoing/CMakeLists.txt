@@ -23,7 +23,8 @@ find_package(serial REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/VisualServoing.action"
-  DEPENDENCIES std_msgs
+  "action/TopologyMap.action"
+  DEPENDENCIES std_msgs geometry_msgs
 )
 
 install(PROGRAMS
