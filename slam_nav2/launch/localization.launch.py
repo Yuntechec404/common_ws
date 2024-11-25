@@ -74,15 +74,15 @@ def generate_launch_description():
         default_value='',
         description='Top-level namespace')
 
-    # declare_map_yaml_cmd = DeclareLaunchArgument(
-    #     'map',
-    #     default_value='/home/user/ros2_ws/src/common_ws/slam_nav2/maps/gallery_map_2.yaml',
-    #     description='Path to the map yaml file')
-    
     declare_map_yaml_cmd = DeclareLaunchArgument(
         'map',
-        default_value='/home/user/ros2_ws/src/common_ws/slam_nav2/maps/esoc_map.yaml',
+        default_value='/home/user/ros2_ws/src/common_ws/slam_nav2/maps/gallery_map_2.yaml',
         description='Path to the map yaml file')
+    
+    # declare_map_yaml_cmd = DeclareLaunchArgument(
+    #     'map',
+    #     default_value='/home/user/ros2_ws/src/common_ws/slam_nav2/maps/esoc_map.yaml',
+    #     description='Path to the map yaml file')
 
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         'use_sim_time',

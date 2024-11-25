@@ -1,10 +1,11 @@
-#goal definition
+# Goal
 string goal
 string target_name
 geometry_msgs/Pose target_pose
 ---
-#result definition
-string result
+# Result
+string[] path
+float64 distance
 ---
-#feedback
+# Feedback
 string feedback

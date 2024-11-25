@@ -15,10 +15,21 @@
     # 'PBVS,parking_bodycamera,1.0',
     # 'PBVS,drop_pallet,1.0']
 
-    command_list_yaml: ['TopologyMap, P1, 0.0',
+    command_list_yaml: ['TopologyMap,P1',
+    'PBVS,parking_forkcamera,2.0',
     'PBVS,raise_pallet,2.0',
-    'TopologyMap, P2',
-    'TopologyMap, P1']
+    'TopologyMap,P2',
+    'PBVS,parking_bodycamera,2.0',
+    'PBVS,drop_pallet,2.0',
+    'odom,odom_front,-0.33',
+    'PBVS,raise_pallet,1.0',
+    'TopologyMap,P1',
+    'PBVS,parking_bodycamera,1.0',
+    'PBVS,drop_pallet,1.0']
+    
+    waypoints: '{"P1": [1.786, -0.379, -0.999, 0.011],
+                 "P2": [6.653, -0.414, 0.719, 0.694],
+                 "P3": [9.287, 0.002, -0.663, 0.748]}'
 
     # command [PBVS,parking_forkcamera,layer]   使用牙叉相機對位棧板
     # command [PBVS,parking_bodycamera,layer]   使用車體相機對位貨架

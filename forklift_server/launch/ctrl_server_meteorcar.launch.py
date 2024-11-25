@@ -9,11 +9,11 @@ def generate_launch_description():
         'param',
         'parameter.yaml'
     )
-        
+
     node = Node(
         package='forklift_server',
-        executable='ctrl_server_.py',
-        name='ctrl_server_',
+        executable='ctrl_server.py',
+        name='ctrl_server',
         parameters=[param]
     )
 

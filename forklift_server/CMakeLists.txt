@@ -19,7 +19,7 @@ find_package(slam_toolbox REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2 REQUIRED)
 # 3rd party
-
+find_package(slam_nav2 REQUIRED)
 
 # message
 # find_package(rosidl_default_generators REQUIRED)
@@ -30,7 +30,6 @@ find_package(tf2 REQUIRED)
 
 install(PROGRAMS
   node/ctrl_server.py
-  node/ctrl_server_.py
   node/test_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
