@@ -11,15 +11,14 @@ find_package(rclpy REQUIRED)
 # message
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(slam_toolbox REQUIRED)
 # find_package(visual_servoing REQUIRED)
 # tf
 find_package(tf2_ros REQUIRED)
 find_package(tf2 REQUIRED)
 # 3rd party
-find_package(slam_nav2 REQUIRED)
+find_package(slam_toolbox REQUIRED)
+find_package(nav_msgs REQUIRED)
 
 # message
 # find_package(rosidl_default_generators REQUIRED)

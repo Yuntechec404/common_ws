@@ -30,6 +30,7 @@ install(PROGRAMS
 install(DIRECTORY
   launch
   param
+  maps
   DESTINATION share/${PROJECT_NAME}
 )
 ament_package()

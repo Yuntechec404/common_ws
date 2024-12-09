@@ -73,15 +73,15 @@ def generate_launch_description():
         'namespace',
         default_value='',
         description='Top-level namespace')
-
+    
     declare_map_yaml_cmd = DeclareLaunchArgument(
         'map',
-        default_value='/home/user/ros2_ws/src/common_ws/slam_nav2/maps/gallery_map_2.yaml',
+        default_value=os.path.join(bringup_dir, 'maps', 'gallery_map.yaml'),
         description='Path to the map yaml file')
     
     # declare_map_yaml_cmd = DeclareLaunchArgument(
     #     'map',
-    #     default_value='/home/user/ros2_ws/src/common_ws/slam_nav2/maps/esoc_map.yaml',
+    #     default_value=os.path.join(bringup_dir, 'maps', 'esoc_map.yaml'),
     #     description='Path to the map yaml file')
 
     declare_use_sim_time_cmd = DeclareLaunchArgument(
@@ -159,12 +159,12 @@ def generate_launch_description():
                 name='map_server',
                 parameters=[configured_params],
                 remappings=remappings),
-            ComposableNode(
-                package='nav2_amcl',
-                plugin='nav2_amcl::AmclNode',
-                name='amcl',
-                parameters=[configured_params],
-                remappings=remappings),
+            # ComposableNode(
+            #     package='nav2_amcl',
+            #     plugin='nav2_amcl::AmclNode',
+            #     name='amcl',
+            #     parameters=[configured_params],
+            #     remappings=remappings),
             ComposableNode(
                 package='nav2_lifecycle_manager',
                 plugin='nav2_lifecycle_manager::LifecycleManager',
@@ -186,6 +186,7 @@ def generate_launch_description():
 
     # Create the launch description and populate
     ld = LaunchDescription()
+    ld.add_action(rviz_node)
 
     # Set environment variables
     ld.add_action(stdout_linebuf_envvar)
@@ -204,6 +205,5 @@ def generate_launch_description():
     # Add the actions to launch all of the localiztion nodes
     ld.add_action(load_nodes)
     ld.add_action(load_composable_nodes)
-    ld.add_action(rviz_node)
 
     return ld

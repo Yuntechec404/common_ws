@@ -21,15 +21,19 @@
     'TopologyMap,P2',
     'PBVS,parking_bodycamera,2.0',
     'PBVS,drop_pallet,2.0',
-    'odom,odom_front,-0.33',
+    'odom,odom_front,-0.31',
     'PBVS,raise_pallet,1.0',
     'TopologyMap,P1',
     'PBVS,parking_bodycamera,1.0',
     'PBVS,drop_pallet,1.0']
+
+    # command_list_yaml: ['TopologyMap,P1',
+    # 'odom,odom_front,-0.33',
+    # 'TopologyMap,P2']
     
-    waypoints: '{"P1": [1.786, -0.379, -0.999, 0.011],
-                 "P2": [6.653, -0.414, 0.719, 0.694],
-                 "P3": [9.287, 0.002, -0.663, 0.748]}'
+    waypoints: '{"P1": [5.010080337524414, 1.899872064590454, 0.9909603668940082, 0.13415495236961086],
+                 "P2": [6.036149978637695, 5.755815505981445, 0.9915192728076967, 0.12995973088190235],
+                 "P3": [0.0, 0.0, 0.0, 0.0]}'
 
     # command [PBVS,parking_forkcamera,layer]   使用牙叉相機對位棧板
     # command [PBVS,parking_bodycamera,layer]   使用車體相機對位貨架
@@ -39,3 +43,5 @@
     # command [odom,odom_front,-1.0]            後退 1.0 meter
     # command [odom,odom_turn,90.0]             左轉 90.0 degree
     # command [odom,odom_turn,-90.0]            右轉 90.0 degree
+    # command [TopologyMap,P1]                  導航至P1
+    # waypoints: '{"P1": [position.x, position.y ,orientation.z, orientation.w]}'

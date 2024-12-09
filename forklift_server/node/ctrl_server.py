@@ -40,7 +40,7 @@ class CtrlServer(Node):
             cmd = self.command_2d[self.current_command_index]
             action_type = cmd[0]
 
-            if action_type == 'PBVS':
+            if action_type == 'PBVS' or action_type == 'odom' :
                 self.execute_pbvs(cmd[1], float(cmd[2]))
             elif action_type == 'TopologyMap':
                 self.execute_navigation(cmd[1])

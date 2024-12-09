@@ -287,7 +287,7 @@ class Action():
             desired_dist = self.initial_marker_pose_x * abs(math.cos((math.pi / 2.) - self.initial_marker_pose_theta))
             
             remained_dist = desired_dist + dist_from_start
-            self.cmd_vel.fnGoStraight(Kp, desired_dist)
+            self.cmd_vel.fnGoStraight(Kp, -desired_dist)
 
             if abs(remained_dist) < 0.02:
                 self.cmd_vel.fnStop()
