@@ -9,6 +9,7 @@ from std_msgs.msg import String
 from nav_msgs.msg import Odometry
 from forklift_driver.msg import Meteorcar
 from visp_megapose.msg import Confidence
+from visual_servoing.msg import Detection
 import numpy as np
 # ROS2 
 import rclpy
@@ -44,16 +45,18 @@ class VisualServoingActionServer(Node):
         self.action = Action(self)
         
         self._action_server = ActionServer(self, VisualServoing, 'VisualServoing', self.execute_callback, callback_group=self.callback_group2)
-        self.fnDetectionAllowed("not_allowed","not_allowed")
+        self.fnDetectionAllowed(False, False, 0.0)
         
-    def fnDetectionAllowed(self, shelf_string, pallet_string):
-        shelf_msg = String()
-        shelf_msg.data = shelf_string
-        self.shelf_detection_allowed_pub.publish(shelf_msg)
+    def fnDetectionAllowed(self, shelf_detection, pallet_detection, layer):
+        shelf_msg = Detection()
+        shelf_msg.detection_allowed = shelf_detection
+        shelf_msg.layer = layer
+        self.shelf_detection_pub.publish(shelf_msg)
         
-        pallet_msg = String()
-        pallet_msg.data = pallet_string
-        self.pallet_detection_allowed_pub.publish(pallet_msg)
+        pallet_msg = Detection()
+        pallet_msg.detection_allowed = pallet_detection
+        pallet_msg.layer = layer
+        self.pallet_detection_pub.publish(pallet_msg)
         # self.get_logger().info("shelf_msg = {}, pallet_msg = {}".format(shelf_msg, pallet_msg))
 
     async def execute_callback(self, goal_handle):
@@ -103,7 +106,7 @@ class VisualServoingActionServer(Node):
         # Forklift_variable
         self.updownposition = 0.0
         # confidence_variable
-        self.detectionConfidence = DetectionConfidence(
+        self.sub_detectionConfidence = DetectionConfidence(
             pallet_confidence = 0.0,
             pallet_detection = False,
             shelf_confidence = 0.0,
@@ -260,13 +263,13 @@ class VisualServoingActionServer(Node):
         self.pallet_confidence_sub = self.create_subscription(Confidence, self.pallet_topic + "_confidence", self.cbPalletConfidence, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", 1, callback_group=self.callback_group)
         self.fork_pub = self.create_publisher(Meteorcar, "/cmd_fork", 1, callback_group=self.callback_group)
-        self.pallet_detection_allowed_pub = self.create_publisher(String, self.pallet_topic + "_detection_allowed", 1, callback_group=self.callback_group)
+        self.pallet_detection_pub = self.create_publisher(Detection, self.pallet_topic + "_detection", 1, callback_group=self.callback_group)
         
         if(self.shelf_format == True):
             self.shelf_sub = self.create_subscription(PoseArray, self.shelf_topic, self.shelf_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         else:
             self.shelf_confidence_sub = self.create_subscription(Confidence, self.shelf_topic + "_confidence", self.cbShelfConfidence, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
-            self.shelf_detection_allowed_pub = self.create_publisher(String, self.shelf_topic + "_detection_allowed", 1, callback_group=self.callback_group)
+            self.shelf_detection_pub = self.create_publisher(Detection, self.shelf_topic + "_detection", 1, callback_group=self.callback_group)
             self.shelf_sub = self.create_subscription(Pose, shelf, self.shelf_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
 
     def log_info(self):
@@ -287,7 +290,7 @@ class VisualServoingActionServer(Node):
     
     def SpinOnce_confidence(self):
         # rclpy.spin_once(self)
-        return self.detectionConfidence
+        return self.sub_detectionConfidence
 
     def odom_callback(self, msg):
         quaternion = (msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w)
@@ -357,12 +360,12 @@ class VisualServoingActionServer(Node):
         self.updownposition = msg.fork_position
         
     def cbPalletConfidence(self, msg):
-        self.detectionConfidence.pallet_confidence = msg.object_confidence
-        self.detectionConfidence.pallet_detection = msg.model_detection
+        self.sub_detectionConfidence.pallet_confidence = msg.object_confidence
+        self.sub_detectionConfidence.pallet_detection = msg.model_detection
 
     def cbShelfConfidence(self, msg):
-        self.detectionConfidence.shelf_confidence = msg.object_confidence
-        self.detectionConfidence.shelf_detection = msg.model_detection
+        self.sub_detectionConfidence.shelf_confidence = msg.object_confidence
+        self.sub_detectionConfidence.shelf_detection = msg.model_detection
 
 def main(args=None):
     rclpy.init(args=args)
