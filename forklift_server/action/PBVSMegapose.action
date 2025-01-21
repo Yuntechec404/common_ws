@@ -1,5 +1,6 @@
 #goal definition
-bool goal
+string command
+float32 layer_dist
 ---
 #result definition
 string result

@@ -17,6 +17,12 @@ add_action_files(
   DIRECTORY action
   FILES TopologyMap.action
   FILES PBVS.action
+  FILES PBVSMegapose.action
+)
+
+add_message_files(
+  FILES
+  Detection.msg
 )
 
 generate_messages(
