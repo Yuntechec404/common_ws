@@ -31,6 +31,7 @@ class Subscriber():
         self.get_parameters()
         self.init_parame()
         self.create_subscriber_publisher()
+        self.fnDetectionAllowed(False, False, 0.0)
 
     def get_parameters(self):
         # Subscriber Topic setting
@@ -165,7 +166,6 @@ class Subscriber():
         
         self.pallet_detection_pub = rospy.Publisher(self.pallet_topic + "_detection", forklift_server.msg.Detection, queue_size = 1)
         self.shelf_detection_pub = rospy.Publisher(self.shelf_topic + "_detection", forklift_server.msg.Detection, queue_size = 1)
-        self.fnDetectionAllowed(False, False, 0.0)
     
     def fnDetectionAllowed(self, shelf_detection, pallet_detection, layer):
         shelf_msg = forklift_server.msg.Detection()
@@ -177,6 +177,7 @@ class Subscriber():
         pallet_msg.detection_allowed = pallet_detection
         pallet_msg.layer = layer
         self.pallet_detection_pub.publish(pallet_msg)
+        rospy.sleep(0.2)
         # rospy.loginfo("shelf_msg = {}, pallet_msg = {}".format(shelf_msg, pallet_msg))
 
     def __del__(self):
@@ -193,7 +194,7 @@ class Subscriber():
 
     def cbGetPallet(self, msg):
         try:
-            if self.shelf_or_pallet == False:
+            if self.shelf_or_pallet == True:
                 marker_msg = msg
                 quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
                 theta = tf.transformations.euler_from_quaternion(quaternion)[1]
@@ -208,7 +209,7 @@ class Subscriber():
 
     def cbGetShelf(self, msg):
         try:
-            if self.shelf_or_pallet == True:
+            if self.shelf_or_pallet == False:
                 marker_msg = msg
                 quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
                 theta = tf.transformations.euler_from_quaternion(quaternion)[1]
@@ -272,7 +273,7 @@ class PBVSAction():
         self.PBVS = PBVS(self._as, self.subscriber, msg)
         rospy.logwarn('PBVS Succeeded')
         self._result.result = 'PBVS Succeeded'
-        self.subscriber.shelf_or_pallet = False
+        # self.shelf_or_pallet = False
         self._as.set_succeeded(self._result)
         self.PBVS = None
 
