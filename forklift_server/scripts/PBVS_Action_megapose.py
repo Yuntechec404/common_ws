@@ -179,7 +179,7 @@ class Action():
             
             if abs(desired_angle_turn) < desired_angle  :
                 self.cmd_vel.fnStop()
-                if self.check_wait_time > 20 :
+                if self.check_wait_time > 15 :
                     self.check_wait_time = 0
                     return True
                 else:
@@ -194,21 +194,21 @@ class Action():
 
     def fnSeqChangingtheta(self, threshod, object_name): #旋轉到marker的theta值為0, threshod為角度誤差值
         self.SpinOnce()
-        Kp = 0.05
+        Kp = 0.02
         if self.TFConfidence(object_name):
-            # self.marker_2d_theta= self.TrustworthyMarker2DTheta(1)
+            # self.marker_2d_theta= self.TrustworthyMarker2DTheta(3)
             # print("desired_angle_turn", self.marker_2d_theta)
             # print("threshod", threshod)
             if abs(self.marker_2d_theta) < threshod  :
                 self.cmd_vel.fnStop()
-                if self.check_wait_time > 20 :
+                if self.check_wait_time > 15 :
                     self.check_wait_time = 0
                     return True
                 else:
                     self.check_wait_time =self.check_wait_time  + 1
                     return False
             else:
-                self.cmd_vel.fnTurn(Kp, self.marker_2d_theta)
+                self.cmd_vel.fnTurn(Kp, -self.marker_2d_theta)
                 self.check_wait_time = 0
                 return False
         else:

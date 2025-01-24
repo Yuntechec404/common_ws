@@ -55,43 +55,6 @@ class PBVS():
         self.command = mode.command
         self.layer_dist = mode.layer_dist
         self.Action = Action(self.subscriber)
-        # self.init_PBVS_parame()
-        self.execute_callback()
-
-    def execute_callback(self):
-        rospy.loginfo('Received goal: Command={}, layer_dist={}'.format(self.command, self.layer_dist))
-        if(self.command == "parking_bodycamera"):
-            self.subscriber.shelf_or_pallet = False  # True: pallet, False: shelf
-            self.parking_bodycamera()
-            return
-        elif(self.command == "parking_forkcamera"):
-            self.subscriber.shelf_or_pallet = True  # True: pallet, False: shelf
-            self.parking_forkcamera()
-            return
-        elif(self.command == "raise_pallet"):
-            self.subscriber.shelf_or_pallet = False
-            self.raise_pallet()
-            return
-        elif(self.command == "drop_pallet"):
-            self.subscriber.shelf_or_pallet = False
-            self.drop_pallet()
-            return
-        elif(self.command == "odom_front"):
-            self.subscriber.shelf_or_pallet = False
-            self.odom_front()
-            return
-        elif(self.command == "odom_turn"):
-            self.subscriber.shelf_or_pallet = False
-            self.odom_turn()
-            return
-        else:
-            rospy.logwarn("Unknown command")
-            self._result.result = 'fail'
-            self._as.set_succeeded(self._result)
-            return
-
-    def __del__(self):
-        rospy.logwarn('delet PBVS')
 
     def parking_bodycamera(self):
         current_sequence = ParkingBodyCameraSequence.init_fork.value
@@ -104,6 +67,8 @@ class PBVS():
                 previous_sequence = current_sequence  # 更新 previous_sequence
 
             if(current_sequence == ParkingBodyCameraSequence.init_fork.value):
+                self.subscriber.fnDetectionAllowed(True, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
+
                 self.is_sequence_finished = self.Action.fnForkUpdown(self.subscriber.bodycamera_parking_fork_init)
                 
                 if self.is_sequence_finished == True:
@@ -180,6 +145,8 @@ class PBVS():
 
             if(current_sequence == ParkingForkCameraSequence.init_fork.value):
                 if self.layer_dist == 1.0:
+                    self.subscriber.fnDetectionAllowed(True, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
+
                     self.is_sequence_finished = self.Action.fnForkUpdown(self.subscriber.forkcamera_parking_fork_layer1)
                 elif self.layer_dist == 2.0:
                     self.is_sequence_finished = self.Action.fnForkUpdown(self.subscriber.forkcamera_parking_fork_layer2)

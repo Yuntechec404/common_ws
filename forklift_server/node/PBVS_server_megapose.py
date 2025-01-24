@@ -132,7 +132,7 @@ class Subscriber():
         self.previous_robot_2d_theta = 0.0
         self.total_robot_2d_theta = 0.0
         # AprilTag_param
-        self.shelf_or_pallet = False
+        self.shelf_or_pallet = True
         self.offset_x = 0.0
         self.marker_2d_pose_x = 0.0
         self.marker_2d_pose_y = 0.0
@@ -197,7 +197,7 @@ class Subscriber():
             if self.shelf_or_pallet == True:
                 marker_msg = msg
                 quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
-                theta = tf.transformations.euler_from_quaternion(quaternion)[1]
+                theta = tf.transformations.euler_from_quaternion(quaternion)[2]
                 self.marker_2d_pose_x = -marker_msg.position.z
                 self.marker_2d_pose_y = marker_msg.position.x + self.offset_x
                 self.marker_2d_theta = -theta
@@ -212,7 +212,7 @@ class Subscriber():
             if self.shelf_or_pallet == False:
                 marker_msg = msg
                 quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
-                theta = tf.transformations.euler_from_quaternion(quaternion)[1]
+                theta = tf.transformations.euler_from_quaternion(quaternion)[2]
                 self.marker_2d_pose_x = -marker_msg.position.z
                 self.marker_2d_pose_y = marker_msg.position.x + self.offset_x
                 self.marker_2d_theta = -theta
@@ -263,14 +263,39 @@ class PBVSAction():
     def __init__(self, name):
         self.subscriber = Subscriber()
         self._action_name = name
-        self._as = actionlib.SimpleActionServer(self._action_name, forklift_server.msg.PBVSMegaposeAction, execute_cb=self.execute_cb, auto_start = False)
+        self._as = actionlib.SimpleActionServer(self._action_name, forklift_server.msg.PBVSMegaposeAction, execute_cb=self.execute_callback, auto_start = False)
         self._result = forklift_server.msg.PBVSResult()
         self._as.start()
 
-    def execute_cb(self, msg):
-        rospy.loginfo('PBVS receive command : %s' % (msg))
-        
+    def execute_callback(self, msg):
+        # rospy.loginfo('Received goal: Command={}, layer_dist={}'.format(self.command, self.layer_dist))
+        rospy.logwarn('PBVS receive command : %s' % (msg))
         self.PBVS = PBVS(self._as, self.subscriber, msg)
+
+        if(msg.command == "parking_bodycamera"):
+            self.subscriber.shelf_or_pallet = False  # True: pallet, False: shelf
+            self.PBVS.parking_bodycamera()
+        elif(msg.command == "parking_forkcamera"):
+            self.subscriber.shelf_or_pallet = True  # True: pallet, False: shelf
+            self.PBVS.parking_forkcamera()
+        elif(msg.command == "raise_pallet"):
+            self.subscriber.shelf_or_pallet = False
+            self.PBVS.raise_pallet()
+        elif(msg.command == "drop_pallet"):
+            self.subscriber.shelf_or_pallet = False
+            self.PBVS.drop_pallet()
+        elif(msg.command == "odom_front"):
+            self.subscriber.shelf_or_pallet = False
+            self.PBVS.odom_front()
+        elif(msg.command == "odom_turn"):
+            self.subscriber.shelf_or_pallet = False
+            self.PBVS.odom_turn()
+        else:
+            rospy.logwarn("Unknown command")
+            self._result.result = 'fail'
+            self._as.set_aborted(self._result)
+            return
+        
         rospy.logwarn('PBVS Succeeded')
         self._result.result = 'PBVS Succeeded'
         # self.shelf_or_pallet = False
