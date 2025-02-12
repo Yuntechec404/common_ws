@@ -22,7 +22,7 @@ add_action_files(
   FILES AprilTag.action
 )
 find_package(Eigen3 REQUIRED)
-find_package(OpenCV REQUIRED)
+find_package(OpenCV 4.7.0 REQUIRED)
 find_package(apriltag REQUIRED)
 
 # Set the build type.  Options are:

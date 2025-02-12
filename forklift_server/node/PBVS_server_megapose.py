@@ -157,15 +157,15 @@ class Subscriber():
         
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.cbGetOdom, queue_size = 1)
         self.forkpose_sub = rospy.Subscriber(self.forkpos, meteorcar, self.cbGetforkpos, queue_size = 1)
-        self.pub_cmd_vel = rospy.Publisher('/cmd_vel', Twist, queue_size = 1)
-        self.pub_fork = rospy.Publisher('/cmd_fork', meteorcar, queue_size = 1)
+        self.pub_cmd_vel = rospy.Publisher('/cmd_vel', Twist, queue_size = 1, latch=True)
+        self.pub_fork = rospy.Publisher('/cmd_fork', meteorcar, queue_size = 1, latch=True)
         self.pallet_sub = rospy.Subscriber(pallet, Pose, self.cbGetPallet, queue_size = 1)
         self.shelf_sub = rospy.Subscriber(shelf, Pose, self.cbGetShelf, queue_size = 1)
         self.pallet_confidence_sub = rospy.Subscriber(self.pallet_topic + "_confidence", Confidence, self.cbGetPalletConfidence, queue_size = 1)
         self.shelf_confidence_sub = rospy.Subscriber(self.shelf_topic + "_confidence", Confidence, self.cbGetShelfConfidence, queue_size = 1)
         
-        self.pallet_detection_pub = rospy.Publisher(self.pallet_topic + "_detection", forklift_server.msg.Detection, queue_size = 1)
-        self.shelf_detection_pub = rospy.Publisher(self.shelf_topic + "_detection", forklift_server.msg.Detection, queue_size = 1)
+        self.pallet_detection_pub = rospy.Publisher(self.pallet_topic + "_detection", forklift_server.msg.Detection, queue_size = 1, latch=True)
+        self.shelf_detection_pub = rospy.Publisher(self.shelf_topic + "_detection", forklift_server.msg.Detection, queue_size = 1, latch=True)
     
     def fnDetectionAllowed(self, shelf_detection, pallet_detection, layer):
         shelf_msg = forklift_server.msg.Detection()
@@ -197,7 +197,7 @@ class Subscriber():
             if self.shelf_or_pallet == True:
                 marker_msg = msg
                 quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
-                theta = tf.transformations.euler_from_quaternion(quaternion)[2]
+                theta = tf.transformations.euler_from_quaternion(quaternion)[1]
                 self.marker_2d_pose_x = -marker_msg.position.z
                 self.marker_2d_pose_y = marker_msg.position.x + self.offset_x
                 self.marker_2d_theta = -theta
@@ -212,7 +212,7 @@ class Subscriber():
             if self.shelf_or_pallet == False:
                 marker_msg = msg
                 quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
-                theta = tf.transformations.euler_from_quaternion(quaternion)[2]
+                theta = tf.transformations.euler_from_quaternion(quaternion)[1]
                 self.marker_2d_pose_x = -marker_msg.position.z
                 self.marker_2d_pose_y = marker_msg.position.x + self.offset_x
                 self.marker_2d_theta = -theta

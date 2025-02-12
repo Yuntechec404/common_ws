@@ -67,7 +67,7 @@ class PBVS():
                 previous_sequence = current_sequence  # 更新 previous_sequence
 
             if(current_sequence == ParkingBodyCameraSequence.init_fork.value):
-                self.subscriber.fnDetectionAllowed(True, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
+                # self.subscriber.fnDetectionAllowed(True, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
 
                 self.is_sequence_finished = self.Action.fnForkUpdown(self.subscriber.bodycamera_parking_fork_init)
                 
@@ -84,28 +84,28 @@ class PBVS():
                     self.is_sequence_finished = False
             
             elif(current_sequence == ParkingBodyCameraSequence.move_nearby_parking_lot.value):
-                self.subscriber.fnDetectionAllowed(True, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
+                # self.subscriber.fnDetectionAllowed(True, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
                 self.is_sequence_finished = self.Action.fnSeqMovingNearbyParkingLot(self.subscriber.bodycamera_desired_dist_threshold)
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingBodyCameraSequence.parking.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingBodyCameraSequence.parking.value):
-                self.subscriber.fnDetectionAllowed(True, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
+                # self.subscriber.fnDetectionAllowed(True, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
                 self.is_sequence_finished = self.Action.fnSeqParking(self.subscriber.bodycamera_parking_stop, 1.0, "bodycamera")
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingBodyCameraSequence.changingtheta.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingBodyCameraSequence.changingtheta.value):
-                self.subscriber.fnDetectionAllowed(True, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
+                # self.subscriber.fnDetectionAllowed(True, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
                 self.is_sequence_finished = self.Action.fnSeqChangingtheta(self.subscriber.bodycamera_Changingtheta_threshold, "bodycamera")
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingBodyCameraSequence.decide.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingBodyCameraSequence.decide.value):
-                self.subscriber.fnDetectionAllowed(True, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
+                # self.subscriber.fnDetectionAllowed(True, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
                 self.is_sequence_finished = self.Action.fnSeqdecide(self.subscriber.bodycamera_decide_distance)
                 
                 if self.is_sequence_finished == True:
@@ -116,7 +116,7 @@ class PBVS():
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingBodyCameraSequence.back.value):
                 # self.is_sequence_finished = self.Action.fnseqMoveToMarkerDist(self.subscriber.bodycamera_back_distance)
-                self.subscriber.fnDetectionAllowed(True, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
+                # self.subscriber.fnDetectionAllowed(True, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
                 self.is_sequence_finished = self.Action.fnseqDeadReckoning(-self.subscriber.bodycamera_back_distance)
                 
                 if self.is_sequence_finished == True:
@@ -126,11 +126,13 @@ class PBVS():
 
             elif(current_sequence == ParkingBodyCameraSequence.stop.value):
                 self.subscriber.fnDetectionAllowed(False, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
+                rospy.Rate(10).sleep()
                 return
             
             else:
                 rospy.logerr('Error: {0} does not exist'.format(current_sequence))
                 self.subscriber.fnDetectionAllowed(False, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
+                rospy.Rate(10).sleep()
                 return
                
     def parking_forkcamera(self):
@@ -144,9 +146,8 @@ class PBVS():
                 previous_sequence = current_sequence  # 更新 previous_sequence
 
             if(current_sequence == ParkingForkCameraSequence.init_fork.value):
+                # self.subscriber.fnDetectionAllowed(False, True, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
                 if self.layer_dist == 1.0:
-                    self.subscriber.fnDetectionAllowed(True, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
-
                     self.is_sequence_finished = self.Action.fnForkUpdown(self.subscriber.forkcamera_parking_fork_layer1)
                 elif self.layer_dist == 2.0:
                     self.is_sequence_finished = self.Action.fnForkUpdown(self.subscriber.forkcamera_parking_fork_layer2)
@@ -167,14 +168,14 @@ class PBVS():
                     current_sequence = ParkingForkCameraSequence.changingtheta.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingForkCameraSequence.changingtheta.value):
-                self.subscriber.fnDetectionAllowed(False, True, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
+                # self.subscriber.fnDetectionAllowed(False, True, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
                 self.is_sequence_finished = self.Action.fnSeqChangingtheta(self.subscriber.forkcamera_Changingtheta_threshold, "forkcamera")
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingForkCameraSequence.decide.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingForkCameraSequence.decide.value):
-                self.subscriber.fnDetectionAllowed(False, True, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
+                # self.subscriber.fnDetectionAllowed(False, True, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
                 self.is_sequence_finished = self.Action.fnSeqdecide(self.subscriber.forkcamera_decide_distance)
                 
                 if self.is_sequence_finished == True:
@@ -185,7 +186,7 @@ class PBVS():
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingForkCameraSequence.back.value):
                 # self.is_sequence_finished = self.Action.fnseqMoveToMarkerDist(self.subscriber.forkcamera_back_distance)
-                self.subscriber.fnDetectionAllowed(False, True, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
+                # self.subscriber.fnDetectionAllowed(False, True, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
                 self.is_sequence_finished = self.Action.fnseqDeadReckoning(-self.subscriber.forkcamera_back_distance)
                 
                 if self.is_sequence_finished == True:
@@ -194,11 +195,13 @@ class PBVS():
 
             elif(current_sequence == ParkingForkCameraSequence.stop.value):
                 self.subscriber.fnDetectionAllowed(False, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_string, pallet_string)
+                rospy.Rate(10).sleep()
                 return
             
             else:
                 rospy.loginfo('Error: {0} does not exist'.format(current_sequence))
                 self.subscriber.fnDetectionAllowed(False, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_string, pallet_string)
+                rospy.Rate(10).sleep()
                 return
 
     def raise_pallet(self):
