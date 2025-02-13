@@ -19,7 +19,7 @@ class Subscriber():
         self.sub_info_marker = rospy.Subscriber(shelf_topic, Pose, self.cbGetShelf, queue_size = 1)
         self.sub_info_marker = rospy.Subscriber(pallet_topic, Pose, self.cbGetPallet, queue_size = 1)
         self.sub_odom_robot = rospy.Subscriber(odom_topic, Odometry, self.cbGetRobotOdom, queue_size = 1)
-        self.sub_forwardbackpostion = rospy.Subscriber(forkpos, meteorcar, self.cbGetforkpos, queue_size = 1)
+        self.pub_fork = rospy.Publisher('/cmd_fork', meteorcar, queue_size = 1, latch=True)
         self.ekf_theta = KalmanFilter()
         self.init_parame()
         self.windows()

@@ -54,6 +54,7 @@ class PBVS():
         self.subscriber = subscriber
         self.command = mode.command
         self.layer_dist = mode.layer_dist
+        self.check_wait_time = 0
         self.Action = Action(self.subscriber)
 
     def parking_bodycamera(self):
@@ -126,14 +127,20 @@ class PBVS():
 
             elif(current_sequence == ParkingBodyCameraSequence.stop.value):
                 self.subscriber.fnDetectionAllowed(False, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
-                rospy.Rate(10).sleep()
-                return
+                if self.check_wait_time > 15 :
+                    self.check_wait_time = 0
+                    return
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
             
             else:
                 rospy.logerr('Error: {0} does not exist'.format(current_sequence))
                 self.subscriber.fnDetectionAllowed(False, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
-                rospy.Rate(10).sleep()
-                return
+                if self.check_wait_time > 15 :
+                    self.check_wait_time = 0
+                    return
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
                
     def parking_forkcamera(self):
         current_sequence = ParkingForkCameraSequence.init_fork.value
@@ -195,14 +202,20 @@ class PBVS():
 
             elif(current_sequence == ParkingForkCameraSequence.stop.value):
                 self.subscriber.fnDetectionAllowed(False, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_string, pallet_string)
-                rospy.Rate(10).sleep()
-                return
+                if self.check_wait_time > 15 :
+                    self.check_wait_time = 0
+                    return
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
             
             else:
                 rospy.loginfo('Error: {0} does not exist'.format(current_sequence))
                 self.subscriber.fnDetectionAllowed(False, False, self.layer_dist)  # fnDetectionAllowed(self, shelf_string, pallet_string)
-                rospy.Rate(10).sleep()
-                return
+                if self.check_wait_time > 15 :
+                    self.check_wait_time = 0
+                    return
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
 
     def raise_pallet(self):
         current_sequence = RaisePalletSequence.init_fork.value
@@ -255,10 +268,23 @@ class PBVS():
                 self.is_sequence_finished = self.Action.fnseqDeadReckoning(-self.subscriber.raise_pallet_back_distance)
 
                 if self.is_sequence_finished == True:
+                    current_sequence = RaisePalletSequence.stop.value
+                    self.is_sequence_finished = False
+            
+            elif(current_sequence == RaisePalletSequence.stop.value):
+                if self.check_wait_time > 15 :
+                    self.check_wait_time = 0
                     return
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
+            
             else:
                 rospy.loginfo('Error: {0} does not exist'.format(current_sequence))
-                return
+                if self.check_wait_time > 15 :
+                    self.check_wait_time = 0
+                    return
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
               
     def drop_pallet(self):
         current_sequence = DropPalletSequence.init_fork.value
@@ -306,10 +332,22 @@ class PBVS():
             elif(current_sequence == DropPalletSequence.back.value):
                 self.is_sequence_finished = self.Action.fnseqDeadReckoning(-self.subscriber.drop_pallet_back_distance)
                 if self.is_sequence_finished == True:
+                    current_sequence = DropPalletSequence.stop.value
+                    self.is_sequence_finished = False
+
+            elif(current_sequence == DropPalletSequence.stop.value):
+                if self.check_wait_time > 15 :
+                    self.check_wait_time = 0
                     return
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
             else:
                 rospy.loginfo('Error: {0} does not exist'.format(current_sequence))
-                return
+                if self.check_wait_time > 15 :
+                    self.check_wait_time = 0
+                    return
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
     
     def odom_front(self):
         current_sequence = FrontSequence.Front.value
@@ -325,10 +363,22 @@ class PBVS():
             if(current_sequence == FrontSequence.Front.value):
                 self.is_sequence_finished = self.Action.fnseqDeadReckoning(-self.layer_dist)
                 if self.is_sequence_finished == True:
-                    return
+                    current_sequence = FrontSequence.stop.value
+                    self.is_sequence_finished = False
+
+            elif(current_sequence == FrontSequence.stop.value):
+                    if self.check_wait_time > 15 :
+                        self.check_wait_time = 0
+                        return
+                    else:
+                        self.check_wait_time =self.check_wait_time  +1
             else:
                 rospy.loginfo('Error: {0} does not exist'.format(current_sequence))
-                return
+                if self.check_wait_time > 15 :
+                    self.check_wait_time = 0
+                    return
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
             
     def odom_turn(self):
         current_sequence = TurnSequence.Turn.value
@@ -344,7 +394,19 @@ class PBVS():
             if(current_sequence == TurnSequence.Turn.value):
                 self.is_sequence_finished = self.Action.fnseqDeadReckoningAngle(self.layer_dist)
                 if self.is_sequence_finished == True:
-                    return
+                    current_sequence = TurnSequence.stop.value
+                    self.is_sequence_finished = False
+                
+                elif(current_sequence == TurnSequence.stop.value):
+                    if self.check_wait_time > 15 :
+                        self.check_wait_time = 0
+                        return
+                    else:
+                        self.check_wait_time =self.check_wait_time  +1
             else:
                 rospy.loginfo('Error: {0} does not exist'.format(current_sequence))
-                return
+                if self.check_wait_time > 15 :
+                    self.check_wait_time = 0
+                    return
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
