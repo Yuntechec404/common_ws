@@ -2,20 +2,41 @@
 <node pkg="forklift_server" type="ctrl_server_megapose.py" name="ctrl_server_megapose" output="screen">
     <rosparam param="command">
     [
-        ['TopologyMap', 'P1'],
-        ['PBVS', 'parking_forkcamera', 2], 
+        <!-- ['MoveBase', 'P1'], -->
+        ['MoveBase', 'P2'],
+        ['odom', 'odom_turn', 87],
+
+        ['PBVS', 'parking_forkcamera', 2],
         ['PBVS', 'raise_pallet', 2],
-        ['odom', 'odom_turn', -90.0],
-        ['TopologyMap', 'P2'],
+
+        ['odom', 'odom_turn', -90.0], 
+        ['MoveBase', 'P3'],
+        ['odom', 'odom_turn', 90.0],
+
         ['PBVS', 'parking_bodycamera', 2],
-        ['PBVS', 'drop_pallet', 2], 
+        ['PBVS', 'drop_pallet', 2],
         ['PBVS', 'parking_forkcamera', 1],
         ['PBVS', 'raise_pallet', 1],
-        ['TopologyMap', 'P1'],
+
+        ['odom', 'odom_turn', 90.0],
+        ['MoveBase', 'P4'],
+        ['odom', 'odom_turn', -101],
+
         ['PBVS', 'parking_bodycamera', 1],
         ['PBVS', 'drop_pallet', 1],
-        ['TopologyMap', 'P3']
-    ]
+
+        ['odom', 'odom_turn', -90.0],
+        ['MoveBase', 'P5']
+    ] 
+    </rosparam>
+    <rosparam param= "waypoints">
+    {    
+        "P1": [-6.605, 1.376, -0.675, 0.738],
+        "P2": [-6.458, -3.419, -0.708, 0.707],
+        "P3": [-6.544, -6.050, -0.716, 0.716],
+        "P4": [-6.458, -3.299, -0.708, -0.707],
+        "P5": [-6.409, -8.470, -0.716, 0.716]
+    }
     </rosparam>
 </node>
 </launch>
@@ -25,5 +46,6 @@
 ['PBVS', 'drop_pallet', layer_dist],
 ['PBVS', 'parking_bodycamera', layer_dist],
 ['odom', 'odom_front', layer_dist],
-['odom', 'odom_turn', layer_dist] ,
-['TopologyMap', 'P?']-->
+['odom', 'odom_turn', layer_dist] , +逆時針
+['TopologyMap', 'P?']
+['MoveBase', 'P?']-->

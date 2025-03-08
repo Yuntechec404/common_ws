@@ -167,7 +167,7 @@ class Action():
             
     def fnSeqChangingDirection(self, desired_angle, object_name):
         self.SpinOnce()
-        Kp = 0.3
+        Kp = 0.02
         desired_angle_turn = math.atan2(self.marker_2d_pose_y, self.marker_2d_pose_x)
         if self.TFConfidence(object_name):
             if desired_angle_turn <0:
@@ -179,7 +179,7 @@ class Action():
             
             if abs(desired_angle_turn) < desired_angle  :
                 self.cmd_vel.fnStop()
-                if self.check_wait_time > 15 :
+                if self.check_wait_time > 20 :
                     self.check_wait_time = 0
                     return True
                 else:
@@ -201,7 +201,7 @@ class Action():
             # print("threshod", threshod)
             if abs(self.marker_2d_theta) < threshod  :
                 self.cmd_vel.fnStop()
-                if self.check_wait_time > 15 :
+                if self.check_wait_time > 20 :
                     self.check_wait_time = 0
                     return True
                 else:
