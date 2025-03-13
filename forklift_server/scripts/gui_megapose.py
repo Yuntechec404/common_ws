@@ -16,8 +16,15 @@ class Subscriber():
         pallet_topic = rospy.get_param(rospy.get_name() + "/pallet_topic", "/pallet")
         forkpos = rospy.get_param(rospy.get_name() + "/forkpos", "/forkpos")
         self.offset_x = rospy.get_param(rospy.get_name() + "/offset_x", 0.0)
-        self.sub_info_marker = rospy.Subscriber(shelf_topic, Pose, self.cbGetShelf, queue_size = 1)
-        self.sub_info_marker = rospy.Subscriber(pallet_topic, Pose, self.cbGetPallet, queue_size = 1)
+
+        rospy.loginfo("odom_topic: %s", odom_topic)
+        rospy.loginfo("shelf_topic: %s", shelf_topic)
+        rospy.loginfo("pallet_topic: %s", pallet_topic)
+        rospy.loginfo("forkpos: %s", forkpos)
+        rospy.loginfo("offset_x: %s", self.offset_x)
+
+        self.sub_shelf_topic = rospy.Subscriber(shelf_topic, Pose, self.cbGetShelf, queue_size = 1)
+        self.sub_pallet_topic = rospy.Subscriber(pallet_topic, Pose, self.cbGetPallet, queue_size = 1)
         self.sub_odom_robot = rospy.Subscriber(odom_topic, Odometry, self.cbGetRobotOdom, queue_size = 1)
         self.pub_fork = rospy.Publisher('/cmd_fork', meteorcar, queue_size = 1, latch=True)
         self.ekf_theta = KalmanFilter()
@@ -26,14 +33,12 @@ class Subscriber():
 
     def init_parame(self):
         # Odometry_param
-        self.is_odom_received = False
         self.robot_2d_pose_x = 0.0
         self.robot_2d_pose_y = 0.0
         self.robot_2d_theta = 0.0
         self.previous_robot_2d_theta = 0.0
         self.total_robot_2d_theta = 0.0
         # AprilTag_param
-        self.updown = False
         self.shelf_2d_pose_x = 0.0
         self.shelf_2d_pose_y = 0.0
         self.shelf_2d_theta = 0.0
@@ -64,10 +69,7 @@ class Subscriber():
             self.shelf_2d_theta = -theta
             # rospy.loginfo("Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
 
-    def cbGetRobotOdom(self, msg):
-        if self.is_odom_received == False:
-            self.is_odom_received = True 
-
+    def cbGetRobotOdom(self, msg): 
         quaternion = (msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w)
         theta = tf.transformations.euler_from_quaternion(quaternion)[2]
         if theta < 0:
