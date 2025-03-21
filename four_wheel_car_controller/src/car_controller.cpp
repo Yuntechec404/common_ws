@@ -38,7 +38,7 @@ double Roll = 0.0;    double Pitch = 0.0;    double Yaw = 0.0; double Yaw_zero =
 
 bool new_message_received = false;
 int rate;
-string topic_odom, topic_cmd_vel;
+string port, topic_odom, topic_cmd_vel;
 bool publish_tf = true;
 
 typedef unsigned char byte;
@@ -195,6 +195,7 @@ int main(int argc, char **argv){
 
     ros::NodeHandle np, private_np("~");//为这个进程的节点创建一个句柄
 
+    private_np.param<string>("port", port, "/dev/ttyUSB0");
     private_np.param<int>("rate", rate, 200);
     private_np.param<string>("topic_cmd_vel", topic_cmd_vel, "cmd_vel");
     private_np.param<string>("topic_odom", topic_odom, "odom");
@@ -238,7 +239,7 @@ int main(int argc, char **argv){
     //创建timeout
     serial::Timeout to = serial::Timeout::simpleTimeout(100);
     //设置要打开的串口名称
-    sp.setPort("/dev/ttyUSB0");
+    sp.setPort(port);
     //设置串口通信的波特率
     sp.setBaudrate(115200);
     //串口设置timeout
@@ -258,7 +259,7 @@ int main(int argc, char **argv){
     //判断串口是否打开成功
     if(sp.isOpen())
     {
-        ROS_INFO_STREAM("/dev/ttyUSB0 is opened.");
+        ROS_INFO_STREAM(port << "is opened.");
 
     }
     else
