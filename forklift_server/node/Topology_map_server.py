@@ -76,10 +76,12 @@ class TopologyMap():
 
 class Navigation():
     def __init__(self):
-        odom = rospy.get_param(rospy.get_name() + "/odom", "/odom")
+        # odom = rospy.get_param(rospy.get_name() + "/odom", "/odom")
+        robot_pose = rospy.get_param(rospy.get_name() + "/robot_pose", "/robot_pose")
         self.client = actionlib.SimpleActionClient('move_base',MoveBaseAction)
         self.client.wait_for_server()
-        self.sub_odom_robot = rospy.Subscriber(odom, Odometry, self.cbGetRobotOdom, queue_size = 1)
+        # self.sub_odom_robot = rospy.Subscriber(odom, Odometry, self.cbGetRobotOdom, queue_size = 1)
+        rospy.Subscriber(robot_pose, Pose, self.get_pose, queue_size=1)
         self.cmd_pub = rospy.Publisher('/cmd_vel', Twist, queue_size = 1)
         self.init_param()
 
@@ -107,8 +109,8 @@ class Navigation():
         self.pre_odom = 0.0
         self.odom_pass = 0.0
     
-    def cbGetRobotOdom(self, msg):
-        self.rz, self.rw = msg.pose.pose.orientation.z, msg.pose.pose.orientation.w
+    def get_pose(self, msg):
+        self.rz, self.rw = msg.orientation.z, msg.orientation.w
         yaw_r = math.atan2(2 * self.rw * self.rz, self.rw * self.rw - self.rz * self.rz)
         if(yaw_r < 0):
             yaw_r = yaw_r + 2 * math.pi
