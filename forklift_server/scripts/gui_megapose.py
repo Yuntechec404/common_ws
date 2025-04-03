@@ -9,6 +9,10 @@ from forklift_msg.msg import meteorcar
 from ekf import KalmanFilter
 import tkinter as tk
 
+import csv
+import os
+from datetime import datetime
+
 class Subscriber():
     def __init__(self):
         odom_topic = rospy.get_param(rospy.get_name() + "/odom_topic", "/odom")
@@ -16,6 +20,19 @@ class Subscriber():
         pallet_topic = rospy.get_param(rospy.get_name() + "/pallet_topic", "/pallet")
         forkpos = rospy.get_param(rospy.get_name() + "/forkpos", "/forkpos")
         self.offset_x = rospy.get_param(rospy.get_name() + "/offset_x", 0.0)
+        self.fileEnble = rospy.get_param(rospy.get_name() + "/fileEnble", True)
+        filename = rospy.get_param(rospy.get_name() + "/filename", "shelf_pallet_data.csv")
+
+        if self.fileEnble:
+            # 設定 CSV 檔案名稱
+            self.csv_filename = os.path.join(os.path.expanduser("~"), filename)
+            # 如果檔案不存在，則建立並寫入標題
+            if not os.path.exists(self.csv_filename):
+                with open(self.csv_filename, mode='w', newline='') as file:
+                    writer = csv.writer(file)
+                    writer.writerow(["Timestamp", "shelf_2d_theta", "shelf_2d_pose_x", "shelf_2d_pose_y",
+                                    "pallet_2d_theta", "pallet_2d_pose_x", "pallet_2d_pose_y"])
+            rospy.loginfo(f"Data will be logged to {self.csv_filename}")
 
         rospy.loginfo("odom_topic: %s", odom_topic)
         rospy.loginfo("shelf_topic: %s", shelf_topic)
@@ -52,22 +69,32 @@ class Subscriber():
         self.ekf_theta.init(1,1,5)
 
     def cbGetPallet(self, msg):
-            marker_msg = msg
-            quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
-            theta = tf.transformations.euler_from_quaternion(quaternion)[1]
-            self.pallet_2d_pose_x = -marker_msg.position.z
-            self.pallet_2d_pose_y = marker_msg.position.x + self.offset_x
-            self.pallet_2d_theta = -theta
-            # rospy.loginfo("Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
+        marker_msg = msg
+        quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
+        theta = tf.transformations.euler_from_quaternion(quaternion)[1]
+        self.pallet_2d_pose_x = -marker_msg.position.z
+        self.pallet_2d_pose_y = marker_msg.position.x + self.offset_x
+        self.pallet_2d_theta = -theta
+        # rospy.loginfo("Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
 
     def cbGetShelf(self, msg):
-            marker_msg = msg
-            quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
-            theta = tf.transformations.euler_from_quaternion(quaternion)[1]
-            self.shelf_2d_pose_x = -marker_msg.position.z
-            self.shelf_2d_pose_y = marker_msg.position.x + self.offset_x
-            self.shelf_2d_theta = -theta
-            # rospy.loginfo("Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
+        marker_msg = msg
+        quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
+        theta = tf.transformations.euler_from_quaternion(quaternion)[1]
+        self.shelf_2d_pose_x = -marker_msg.position.z
+        self.shelf_2d_pose_y = marker_msg.position.x + self.offset_x
+        self.shelf_2d_theta = -theta
+        # rospy.loginfo("Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
+
+    def log_data(self):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+
+        with open(self.csv_filename, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow([timestamp, self.shelf_2d_theta, self.shelf_2d_pose_x, self.shelf_2d_pose_y,
+                             self.pallet_2d_theta, self.pallet_2d_pose_x, self.pallet_2d_pose_y])
+        
+        # rospy.loginfo(f"Data logged at {timestamp}")
 
     def cbGetRobotOdom(self, msg): 
         quaternion = (msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w)
@@ -120,8 +147,10 @@ class Subscriber():
             self.labels[key][1].place(x=190, y=value[1])
         while not rospy.is_shutdown():
             self.update_window()
+            if self.fileEnble:
+                self.log_data()
             self.window.update()
-            rospy.sleep(0.05) # Set the desired update rate
+            # rospy.sleep(0.05) # Set the desired update rate
         self.window.destroy()
         # self.update_window()
         # self.window.mainloop()
