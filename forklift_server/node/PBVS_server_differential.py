@@ -48,7 +48,11 @@ class Subscriber():
         # self.camera_ChangingDirection_threshold = rospy.get_param(rospy.get_name() + "/camera_ChangingDirection_threshold", 0.0)
         self.camera_desired_dist_threshold = rospy.get_param(rospy.get_name() + "/camera_desired_dist_threshold", 0.0)
         
+<<<<<<< HEAD
         self.camera_horizon_alignment_threshold = rospy.get_param(rospy.get_name() + "/camera_horizon_alignment_threshold", 0.0)
+=======
+        self.camera_parking_stop_threshold = rospy.get_param(rospy.get_name() + "/camera_parking_stop_threshold", 0.0)
+>>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
         # self.camera_Changingtheta_threshold = rospy.get_param(rospy.get_name() + "/camera_Changingtheta_threshold", 0.0)
         # self.camera_decide_distance = rospy.get_param(rospy.get_name() + "/camera_decide_distance", 0.0)
         # self.camera_back_distance = rospy.get_param(rospy.get_name() + "/camera_back_distance", 0.0)
@@ -58,7 +62,11 @@ class Subscriber():
         # rospy.loginfo("camera_parking_fork_init: {}, type: {}".format(self.camera_parking_fork_init, type(self.camera_parking_fork_init)))
         # rospy.loginfo("camera_ChangingDirection_threshold: {}, type: {}".format(self.camera_ChangingDirection_threshold, type(self.camera_ChangingDirection_threshold)))
         rospy.loginfo("camera_desired_dist_threshold: {}, type: {}".format(self.camera_desired_dist_threshold, type(self.camera_desired_dist_threshold)))        
+<<<<<<< HEAD
         rospy.loginfo("camera_horizon_alignment_threshold: {}, type: {}".format(self.camera_horizon_alignment_threshold, type(self.camera_horizon_alignment_threshold)))
+=======
+        rospy.loginfo("camera_parking_stop_threshold: {}, type: {}".format(self.camera_parking_stop_threshold, type(self.camera_parking_stop_threshold)))
+>>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
         # rospy.loginfo("camera_Changingtheta_threshold: {}, type: {}".format(self.camera_Changingtheta_threshold, type(self.camera_Changingtheta_threshold)))
         # rospy.loginfo("camera_decide_distance: {}, type: {}".format(self.camera_decide_distance, type(self.camera_decide_distance)))
         # rospy.loginfo("camera_back_distance: {}, type: {}".format(self.camera_back_distance, type(self.camera_back_distance)))
@@ -94,17 +102,26 @@ class Subscriber():
         self.object_pose_sub = rospy.Subscriber(object_pose, Pose, self.cbGetObject, queue_size = 1)
         self.object_pose_confidence_sub = rospy.Subscriber(self.pose_topic + "_confidence", Confidence, self.cbGetObjectConfidence, queue_size = 1)
         
+<<<<<<< HEAD
         #pin
         self.pose_detection_pub = rospy.Publisher(self.pose_topic + "_detection", forklift_server.msg.Detection, queue_size = 1, latch=True)
         # self.pallet_detection_pub = rospy.Publisher(self.pallet_topic + "_detection", forklift_server.msg.Detection, queue_size = 1, latch=True)
         # self.shelf_detection_pub = rospy.Publisher(self.shelf_topic + "_detection", forklift_server.msg.Detection, queue_size = 1, latch=True)
+=======
+        self.pallet_detection_pub = rospy.Publisher(self.pallet_topic + "_detection", forklift_server.msg.Detection, queue_size = 1, latch=True)
+        self.shelf_detection_pub = rospy.Publisher(self.shelf_topic + "_detection", forklift_server.msg.Detection, queue_size = 1, latch=True)
+>>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
     
     def fnDetectionAllowed(self, pose_detection, layer):
         pose_msg = forklift_server.msg.Detection()
         pose_msg.detection_allowed = pose_detection
         pose_msg.layer = layer
+<<<<<<< HEAD
         # self.shelf_detection_pub.publish(pose_msg)
         self.pose_detection_pub.publish(pose_msg)   #pin
+=======
+        self.shelf_detection_pub.publish(pose_msg)
+>>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
 
         rospy.sleep(0.2)
         # rospy.loginfo("pose_msg = {}, pallet_msg = {}".format(pose_msg, pallet_msg))
