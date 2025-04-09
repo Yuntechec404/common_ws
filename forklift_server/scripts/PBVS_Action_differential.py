@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-<<<<<<< HEAD
 from sys import flags
-=======
->>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
 import rospy
 import numpy as np
 import math
@@ -16,7 +13,6 @@ class Action():
         # cmd_vel
         self.cmd_vel = cmd_vel(Subscriber)
         self.Subscriber = Subscriber
-<<<<<<< HEAD
         self.NearbySequence = Enum( 'NearbySequence', \
                     'initial_dist \
                     turn_right \
@@ -25,10 +21,6 @@ class Action():
                     turn_left')
         self.current_nearby_sequence = self.NearbySequence.initial_dist.value
         self.previous_nearby_sequence = None  # 用來記錄上一次的階段
-=======
-        self.NearbySequence = Enum('NearbySequence', 'initial_dist go_straight turn_right turn_left')
-        self.current_nearby_sequence = self.NearbySequence.initial_dist.value
->>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
         # Odometry_param
         self.is_odom_received = False
         self.robot_2d_pose_x = 0.0
@@ -52,10 +44,7 @@ class Action():
         self.check_wait_time = 0
         self.is_triggered = False
 
-<<<<<<< HEAD
 
-=======
->>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
     def SpinOnce(self):
         (self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta, \
          self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta)=self.Subscriber.SpinOnce()
@@ -84,13 +73,8 @@ class Action():
     
     def fnseqDeadReckoningAngle(self, target_angle):
         self.SpinOnce()  # 確保獲取到最新位置
-<<<<<<< HEAD
         Kp = 0.3
-        threshold = 0.035  # 停止的閾值（弧度）
-=======
-        Kp = 0.2
         threshold = 0.015  # 停止的閾值（弧度）
->>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
         target_angle_rad = math.radians(target_angle)   # 將目標角度轉換為弧度
         if not self.is_triggered:   # 初始化：如果是第一次調用，記錄初始累積角度
             self.is_triggered = True
@@ -132,11 +116,7 @@ class Action():
         self.SpinOnce()
         Kp = 0.02
         dist = math.sqrt(self.marker_2d_pose_x**2 + self.marker_2d_pose_y**2)
-<<<<<<< HEAD
         if self.TFConfidence() and dist != 0: #pin &->and
-=======
-        if self.TFConfidence() & dist != 0:
->>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
             return True
         else:
             # rospy.logwarn("Confidence Low")
@@ -169,14 +149,11 @@ class Action():
     def fnSeqMovingNearbyParkingLot(self,desired_dist_threshold):
         self.SpinOnce()
         Kp = 0.2
-<<<<<<< HEAD
         err = 0.05
         if self.current_nearby_sequence != self.previous_nearby_sequence:
             rospy.loginfo('current_nearby_sequence {0}'.format(self.NearbySequence(self.current_nearby_sequence)))
             self.previous_nearby_sequence = self.current_nearby_sequence  # 更新 previous_sequence
 
-=======
->>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
         if self.current_nearby_sequence == self.NearbySequence.initial_dist.value:
             if self.TFConfidence():
                 self.initial_robot_pose_theta = self.robot_2d_theta
@@ -186,21 +163,15 @@ class Action():
                 self.initial_marker_pose_theta = self.TrustworthyMarker2DTheta(3)
                 self.initial_marker_pose_x = self.marker_2d_pose_x
                 self.initial_marker_pose_y = self.marker_2d_pose_y
-<<<<<<< HEAD
                 self.desired_dist_diff = abs(self.initial_marker_pose_x) - desired_dist_threshold
                 rospy.loginfo(f'desired_dist_diff:{self.desired_dist_diff}')
                 if abs(self.initial_marker_pose_x) <= desired_dist_threshold:
-=======
-                desired_dist_diff = self.initial_marker_pose_x - desired_dist_threshold
-                if abs(self.initial_marker_pose_x) < desired_dist_threshold:
->>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
                     return True
                 else:
                     self.current_nearby_sequence = self.NearbySequence.turn_right.value
 
         # 水平對準階段
         elif self.current_nearby_sequence == self.NearbySequence.turn_right.value:
-<<<<<<< HEAD
             if self.fnseqDeadReckoningAngle(90):
                 self.current_nearby_sequence = self.NearbySequence.go_straight.value
             else:
@@ -235,36 +206,10 @@ class Action():
             else:
                 self.check_wait_time = 0
                 return False
-=======
-            is_sequence_finished = self.fnseqDeadReckoningAngle(90)
-
-            if is_sequence_finished:
-                self.cmd_vel.fnStop()
-                self.current_nearby_sequence = self.NearbySequence.go_straight.value
-
-        # 前後調整階段
-        elif self.current_nearby_sequence == self.NearbySequence.go_straight.value:
-            is_sequence_finished = self.fnseqDeadReckoning(desired_dist_diff)
-
-            if is_sequence_finished:
-                self.cmd_vel.fnStop()
-                self.current_nearby_sequence = self.NearbySequence.turn_left.value
-        
-        # 恢復原始朝向階段
-        elif self.current_nearby_sequence == self.NearbySequence.turn_left.value:
-            is_sequence_finished = self.fnseqDeadReckoningAngle(-90)
-
-            if is_sequence_finished:
-                self.cmd_vel.fnStop()
-                self.current_nearby_sequence = self.NearbySequence.initial_dist.value
-                return True
-
->>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
         return False
 
     def fnSeqParking(self, tolerance, kp):
         self.SpinOnce()
-<<<<<<< HEAD
         # rospy.loginfo(f'fnSeqParking: {self.marker_2d_pose_y}')
         if self.TFConfidence():
             # 正值表示偏右、負值表示偏左，目標為 0（中心位）
@@ -275,21 +220,6 @@ class Action():
                 # 偏差在容忍範圍內，停止前後運動
                 self.cmd_vel.fnStop()
                 if self.check_wait_time > 20:
-=======
-        if self.TFConfidence():
-            # 正值表示偏右、負值表示偏左，目標為 0（中心位）
-            lateral_error = self.marker_2d_pose_y  
-            # 動態調整 kp：當偏差越大，比例接近 kp；偏差越小，比例也越小
-            kp_adjusted = kp * (abs(lateral_error) / (abs(lateral_error) + 1))
-
-            if abs(lateral_error) > tolerance:
-                # 若偏差超過設定距離，透過前後移動來修正位置
-                self.cmd_vel.fnGoStraight(-kp_adjusted, lateral_error)
-            else:
-                # 偏差在容忍範圍內，停止前後運動
-                self.cmd_vel.fnStop()
-                if self.check_wait_time > 15:
->>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
                     self.check_wait_time = 0
                     return True
                 else:
@@ -299,7 +229,6 @@ class Action():
             self.check_wait_time = 0
             return False
         
-<<<<<<< HEAD
     def fnSeqdecide(self, decide_dist, horizontal_dist):#decide_dist偏離多少公分要後退
         self.SpinOnce()
         if self.TFConfidence():
@@ -309,14 +238,6 @@ class Action():
                 return True
             else:
                 return False
-=======
-    def fnSeqdecide(self, decide_dist):#decide_dist偏離多少公分要後退
-        time.sleep(0.5)
-        self.SpinOnce()
-        dist = self.marker_2d_pose_x
-        if  abs(dist) < abs(decide_dist):
-            return True
->>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
         else:
             return False
 
@@ -388,33 +309,19 @@ class cmd_vel():
             twist.angular.z =0.2
         elif twist.angular.z < -0.2:
             twist.angular.z =-0.2
-<<<<<<< HEAD
         if twist.linear.x > 0 and twist.linear.x < 0.01:
             twist.linear.x =0.02
         elif twist.linear.x < 0 and twist.linear.x > -0.01:
             twist.linear.x =-0.02   
-=======
-        if twist.linear.x > 0 and twist.linear.x < 0.02:
-            twist.linear.x =0.05
-        elif twist.linear.x < 0 and twist.linear.x > -0.02:
-            twist.linear.x =-0.05   
->>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
 
         if twist.linear.x > 0.2:
             twist.linear.x =0.2
         elif twist.linear.x < -0.2:
             twist.linear.x =-0.2                     
-<<<<<<< HEAD
         if twist.angular.z > 0 and twist.angular.z < 0.06:  #pin 0.05 -> 0.06
             twist.angular.z =0.06
         elif twist.angular.z < 0 and twist.angular.z > -0.06:
             twist.angular.z =-0.06
-=======
-        if twist.angular.z > 0 and twist.angular.z < 0.05:
-            twist.angular.z =0.05
-        elif twist.angular.z < 0 and twist.angular.z > -0.05:
-            twist.angular.z =-0.05
->>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
         self.pub_cmd_vel.publish(twist)
 
     def fnStop(self):

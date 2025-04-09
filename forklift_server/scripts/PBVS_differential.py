@@ -56,21 +56,13 @@ class PBVS():
                     current_sequence = ParkingCameraSequence.parking.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingCameraSequence.parking.value):
-<<<<<<< HEAD
                 self.is_sequence_finished = self.Action.fnSeqParking(self.subscriber.camera_horizon_alignment_threshold, 0.2)
-=======
-                self.is_sequence_finished = self.Action.fnSeqParking(self.subscriber.camera_parking_stop_threshold, 0.2)
->>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingCameraSequence.decide.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingCameraSequence.decide.value):
-<<<<<<< HEAD
                 self.is_sequence_finished = self.Action.fnSeqdecide(self.subscriber.camera_desired_dist_threshold, self.subscriber.camera_horizon_alignment_threshold )
-=======
-                self.is_sequence_finished = self.Action.fnSeqdecide(self.subscriber.camera_parking_stop_threshold)
->>>>>>> 76ed4b50bc3205cd5ad073fc7cf286b6c538684a
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingCameraSequence.stop.value
