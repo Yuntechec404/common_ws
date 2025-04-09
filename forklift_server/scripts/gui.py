@@ -9,12 +9,31 @@ from forklift_msg.msg import meteorcar
 from ekf import KalmanFilter
 import tkinter as tk
 
+import csv
+import os
+from datetime import datetime
+
 class Subscriber():
     def __init__(self):
         odom = rospy.get_param(rospy.get_name() + "/odom", "/odom")
         tag_detections_up = rospy.get_param(rospy.get_name() + "/tag_detections_up", "/tag_detections_up")
         tag_detections_down = rospy.get_param(rospy.get_name() + "/tag_detections_down", "/tag_detections_down")
         forkpos = rospy.get_param(rospy.get_name() + "/forkpos", "/forkpos")
+
+        self.fileEnble = rospy.get_param(rospy.get_name() + "/fileEnble", True)
+        filename = rospy.get_param(rospy.get_name() + "/filename", "shelf_pallet_data.csv")
+
+        if self.fileEnble:
+            # 設定 CSV 檔案名稱
+            self.csv_filename = os.path.join(os.path.expanduser("~"), filename)
+            # 如果檔案不存在，則建立並寫入標題
+            if not os.path.exists(self.csv_filename):
+                with open(self.csv_filename, mode='w', newline='') as file:
+                    writer = csv.writer(file)
+                    writer.writerow(["Timestamp", "shelf_2d_theta", "shelf_2d_pose_x", "shelf_2d_pose_y",
+                                    "pallet_2d_theta", "pallet_2d_pose_x", "pallet_2d_pose_y"])
+            rospy.loginfo(f"Data will be logged to {self.csv_filename}")
+
         self.sub_info_marker = rospy.Subscriber(tag_detections_up, AprilTagDetectionArray, self.cbGetMarker_up, queue_size = 1)
         self.sub_info_marker = rospy.Subscriber(tag_detections_down, AprilTagDetectionArray, self.cbGetMarker_down, queue_size = 1)
         self.sub_odom_robot = rospy.Subscriber(odom, Odometry, self.cbGetRobotOdom, queue_size = 1)
@@ -69,6 +88,15 @@ class Subscriber():
         except:
             pass
 
+    def log_data(self):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+
+        with open(self.csv_filename, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow([timestamp, self.marker_2d_theta, self.marker_2d_pose_x, self.marker_2d_pose_y])
+        
+        # rospy.loginfo(f"Data logged at {timestamp}")
+
     def cbGetRobotOdom(self, msg):
         if self.is_odom_received == False:
             self.is_odom_received = True 
@@ -120,6 +148,8 @@ class Subscriber():
             self.labels[key][1].place(x=190, y=value[1])
         while not rospy.is_shutdown():
             self.update_window()
+            if self.fileEnble:
+                self.log_data()
             self.window.update()
             rospy.sleep(0.05) # Set the desired update rate
         self.window.destroy()

@@ -212,6 +212,7 @@ class Action():
                 self.check_wait_time = 0
                 return False
         else:
+            self.check_wait_time = 0
             return False
         
         
@@ -354,6 +355,7 @@ class Action():
             return False
         
     def fnSeqdecide(self, decide_dist):#decide_dist偏離多少公分要後退
+        time.sleep(0.5)
         self.SpinOnce()
         dist = self.marker_2d_pose_y
         if  abs(dist) < abs(decide_dist):
