@@ -2,12 +2,14 @@
     <node name="listener" pkg="four_wheel_car_controller" type="car_controller" output="screen">
         <param name="port" type="str" value="/dev/ttyUSB1"/>    <!-- 設備埠號 -->
         <param name="rate" type="int" value="50"/>              <!-- 執行頻率 -->
-        <param name="K" type="double" value="2.0"/>             <!-- 直線補償 -->
+        
+        <param name="straight_correction" type="bool" value="true"/>    <!-- 啟用直線補償 -->
+        <param name="K" type="double" value="5.0"/>                     <!-- 直線補償 -->
 
-        <param name="topic_cmd_vel" type="str" value="/cmd_vel"/>   <!-- 訂閱速度命令 -->
-        <param name="topic_imu" value="wit/imu" />                  <!-- 訂閱慣性陀螺儀 -->
+        <param name="topic_cmd_vel" type="str" value="/cmd_vel"/>       <!-- 訂閱速度命令 -->
+        <param name="topic_imu"     type="str" value="wit/imu" />       <!-- 訂閱慣性陀螺儀 -->
 
-        <param name="topic_odom" value="wheel_odom" />              <!-- 發佈車輪里程計 -->
-        <param name="publish_tf" value="true" />                    <!-- 發佈 tf 轉換 -->
+        <param name="topic_odom"    type="str" value="wheel_odom" />    <!-- 發佈車輪里程計 -->
+        <param name="publish_tf"    type="bool" value="true" />         <!-- 發佈 tf 轉換 -->
     </node>
 </launch>

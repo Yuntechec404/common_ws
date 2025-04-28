@@ -42,10 +42,12 @@ void send_data(void);//串口发送协议函数
 uint8_t Flag_OK=0;
 
 double Roll = 0.0;    double Pitch = 0.0;    double Yaw = 0.0; double Yaw_zero = 0.0;double Yaw_error = 0.0; double Yaw_last = 0.0;
+bool enable_straight_correction = false; // 是否啟用直線校正
 double current_yaw = 0.0;        // 當前 Yaw 角（從外部 IMU 獲取）
 double initial_yaw = 0.0;        // 直線行駛開始時的初始 Yaw 角
 bool is_straight_moving = false; // 標誌位，表示是否處於直線行駛模式
 double K = 0.5;                  // 校正比例係數（需調試）
+bool imu_data_valid = false;
 
 bool new_message_received = false;
 int rate;
@@ -101,6 +103,7 @@ void imuCallback(const sensor_msgs::Imu::ConstPtr &msg) {
 
   yaw = fmod(yaw + M_PI, 2 * M_PI) - M_PI;
   current_yaw = yaw;
+  imu_data_valid = true; // 標記 IMU 數據有效
 }
 
 void chatterCallback(const geometry_msgs::Twist::ConstPtr &msg) { // 获取键盘控制的回调函数
@@ -119,53 +122,65 @@ void chatterCallback(const geometry_msgs::Twist::ConstPtr &msg) { // 获取键�
   z_mid_angle = msg->angular.z;  // Z 軸旋轉速度目標
 
   // 限制最大速度 1.1 m/s
-  if (x_mid_speed > 1.1) x_mid_speed = 1.1;
-  if (x_mid_speed < -1.1) x_mid_speed = -1.1;
-  if (z_mid_angle > 1.1) z_mid_angle = 1.1;
-  if (z_mid_angle < -1.1) z_mid_angle = -1.1;
+  x_mid_speed = std::max(std::min(x_mid_speed, 1.1f), -1.1f);
+  z_mid_angle = std::max(std::min(z_mid_angle, 1.1f), -1.1f);
   
-  
+
   // 前進命令
-  if (x_mid_speed > 0 && z_mid_angle == 0) { // 按下 I 鍵，前進
-    if (!is_straight_moving || last_motion_direction != FORWARD) {
-      // 首次進入直線行駛或從其他模式切換，記錄初始 Yaw 角
-      is_straight_moving = true;
-      initial_yaw = current_yaw;
-      last_motion_direction = FORWARD;
+  if (x_mid_speed > 0 && z_mid_angle == 0) { // 按下 I 鍵，前進  
+    if (enable_straight_correction && imu_data_valid) {
+      if (!is_straight_moving || last_motion_direction != FORWARD) {
+        // 首次進入直線行駛或從其他模式切換，記錄初始 Yaw 角
+        is_straight_moving = true;
+        initial_yaw = current_yaw;
+        last_motion_direction = FORWARD;
+      }
+
+      // 計算 Yaw 角偏差（弧度）
+      double yaw_error = angle_diff(current_yaw, initial_yaw);
+
+      // 根據偏差計算補償量（若向右偏，yaw_error > 0，需左轉校正）
+      double compensation = -K * yaw_error;
+
+      speed_A = x_mid_speed * (1 + compensation);
+      speed_B = x_mid_speed; 
+      speed_C = x_mid_speed; 
+      speed_D = x_mid_speed * (1 + compensation);
+    } else {
+      speed_A = x_mid_speed;
+      speed_B = x_mid_speed; 
+      speed_C = x_mid_speed; 
+      speed_D = x_mid_speed;
     }
-
-    // 計算 Yaw 角偏差（弧度）
-    double yaw_error = angle_diff(current_yaw, initial_yaw);
-
-    // 根據偏差計算補償量（若向右偏，yaw_error > 0，需左轉校正）
-    double compensation = -K * yaw_error;
-
-    speed_A = x_mid_speed * (1 + compensation);
-    speed_B = x_mid_speed; 
-    speed_C = x_mid_speed; 
-    speed_D = x_mid_speed * (1 + compensation);
 
     // ROS_INFO("Forward - Yaw Error: %.2f rad, Compensation: %.2f", yaw_error, compensation);
   }
   // 後退命令
   else if (x_mid_speed < 0 && z_mid_angle == 0) { // 按下 < 鍵，後退
-    if (!is_straight_moving || last_motion_direction != BACKWARD) {
-      // 首次進入直線行駛或從其他模式切換，記錄初始 Yaw 角
-      is_straight_moving = true;
-      initial_yaw = current_yaw;
-      last_motion_direction = BACKWARD;
+    if (enable_straight_correction && imu_data_valid) {
+      if (!is_straight_moving || last_motion_direction != BACKWARD) {
+        // 首次進入直線行駛或從其他模式切換，記錄初始 Yaw 角
+        is_straight_moving = true;
+        initial_yaw = current_yaw;
+        last_motion_direction = BACKWARD;
+      }
+
+      // 計算 Yaw 角偏差（弧度）
+      double yaw_error = angle_diff(current_yaw, initial_yaw);
+
+      // 根據偏差計算補償量（若向右偏，yaw_error > 0，需左轉校正）
+      double compensation = -K * yaw_error;
+
+      speed_A = x_mid_speed;
+      speed_B = x_mid_speed * (1 + compensation); 
+      speed_C = x_mid_speed * (1 + compensation); 
+      speed_D = x_mid_speed;
+    } else {
+      speed_A = x_mid_speed;
+      speed_B = x_mid_speed; 
+      speed_C = x_mid_speed; 
+      speed_D = x_mid_speed;
     }
-
-    // 計算 Yaw 角偏差（弧度）
-    double yaw_error = angle_diff(current_yaw, initial_yaw);
-
-    // 根據偏差計算補償量（若向右偏，yaw_error > 0，需左轉校正）
-    double compensation = -K * yaw_error;
-
-    speed_A = x_mid_speed;
-    speed_B = x_mid_speed * (1 + compensation); 
-    speed_C = x_mid_speed * (1 + compensation); 
-    speed_D = x_mid_speed;
 
     // ROS_INFO("Backward - Yaw Error: %.2f rad, Compensation: %.2f", yaw_error, compensation);
   }
@@ -229,6 +244,7 @@ int main(int argc, char **argv){
 
   private_np.param<string>("port", port, "/dev/ttyUSB0");
   private_np.param<int>("rate", rate, 200);
+  private_np.param<bool>("straight_correction", enable_straight_correction, false);
   private_np.param<double>("K", K, 0.5);
   private_np.param<string>("topic_cmd_vel", topic_cmd_vel, "cmd_vel");
   private_np.param<string>("topic_odom", topic_odom, "odom");
