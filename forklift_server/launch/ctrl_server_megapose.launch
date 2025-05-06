@@ -11,7 +11,7 @@
 
         ['odom', 'odom_turn', -90.0], 
         ['MoveBase', 'P3'],
-        ['odom', 'odom_turn', 92.0],
+        ['odom', 'odom_turn', 94.0],
 
         ['PBVS', 'parking_bodycamera', 2],
         ['PBVS', 'drop_pallet', 2],
