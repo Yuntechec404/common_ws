@@ -7,33 +7,27 @@
 #include "std_msgs/String.h"
 #include "std_msgs/Float64.h"
 #include "geometry_msgs/Twist.h"
-#include <nav_msgs/Odometry.h>
 #include <sensor_msgs/Imu.h>
+#include <nav_msgs/Odometry.h>
+#include <tf/tf.h>
 #include <tf/transform_broadcaster.h>
-#include <tf/transform_datatypes.h>  // 用於四元數轉換
 #include <string>
 #include <cmath>
 
 using namespace std;
-// 创建一个serial类
+//创建一个serial类
 serial::Serial sp;
 
-#define  to_rad  0.01745329f  //角度转弧度
-
-// 在全局變數中添加運動方向標記
-enum MotionDirection { NONE, FORWARD, BACKWARD };
-MotionDirection last_motion_direction = NONE; // 記錄上一次的運動方向
+#define to_rad 0.01745329f  //角度转弧度
 
 uint8_t FLAG_USART; //串口发送标志
-uint16_t count_1,count_2, count_3;//计数器
+uint16_t count_2;//计数器
 
-uint8_t Flag_start=0;//下位机运行标志
-float x_mid_speed; //
-float y_mid_speed; //
-float z_mid_speed; //
-float z_mid_angle; //
-float angle_A,angle_B,angle_C,angle_D;//发送到下位机的4个轮子的角度
-float speed_A,speed_B,speed_C,speed_D;//发送到下位机的4个轮子的速度
+enum MotionState { FORWARD, BACKWARD, STOPPED, OTHER };
+uint8_t Flag_start = 0;//下位机运行标志
+float x_mid_speed;//
+float z_mid_angle;//
+float speed_A, speed_B, speed_C, speed_D;//发送到下位机的4个轮子的速度
 int size;
 float Data_US[12];//发送到下位机的数据数组
 float Data_UR[22];//接收来自下位机的数据数组
@@ -41,40 +35,53 @@ uint16_t a,b;
 void send_data(void);//串口发送协议函数
 uint8_t Flag_OK=0;
 
-double Roll = 0.0;    double Pitch = 0.0;    double Yaw = 0.0; double Yaw_zero = 0.0;double Yaw_error = 0.0; double Yaw_last = 0.0;
-bool enable_straight_correction = false; // 是否啟用直線校正
-double current_yaw = 0.0;        // 當前 Yaw 角（從外部 IMU 獲取）
-double initial_yaw = 0.0;        // 直線行駛開始時的初始 Yaw 角
-bool is_straight_moving = false; // 標誌位，表示是否處於直線行駛模式
-double K = 0.5;                  // 校正比例係數（需調試）
-bool imu_data_valid = false;
+double Yaw = 0.0;
+double Yaw_zero = 0.0;
+double Yaw_error = 0.0;
+double Yaw_last = 0.0;
 
 bool new_message_received = false;
+string port = "/dev/ttyUSB0";
 int rate;
-string port, topic_odom, topic_imu, topic_cmd_vel;
+string topic_odom, topic_imu, topic_cmd_vel;
 bool publish_tf = true;
 
+// PID 參數
+bool straight_correction = false;
+bool external_imu = false;
+double Kp = 0.035;// 比例增益
+double Ki = 0.05;  // 積分增益
+double Kd = 0.0; // 微分增益
+double integral = 0.0;       // 誤差積分
+double previous_error = 0.0; // 上一次誤差
+double target_yaw = 0.0;     // 目標航向角 (deg)
+double current_yaw = 0.0;    // 當前航向角 (deg)
+
+ros::Time current_time, last_time;
+double dt;
+
 typedef unsigned char byte;
-float b2f(byte m0, byte m1, byte m2, byte m3) { // float 型解算为4个字节
+float b2f(byte m0, byte m1, byte m2, byte m3) {//float 型解算为4个字节 
   if ((m0 == 0x00 || m0 == 0x80) && m1 == 0x00 && m2 == 0x00 && m3 == 0x00) return 0;
-  // 求符号位
+
+  //求符号位
   float sig = 1.;
-  if (m0 >=128.)
-    sig = -1.;
-  
-  // 求阶码
+    if (m0 >=128.)
+      sig = -1.;
+
+  //求阶码
   float jie = 0.;
   if (m0 >=128.) {
-    jie = m0-128.  ;
+    jie = m0-128.;
   } else {
     jie = m0;
   }
+
   jie = jie * 2.;
   if (m1 >=128.)
     jie += 1.;
-  
   jie -= 127.;
-  
+
   //求尾码
   float tail = 0.;
   if (m1 >=128.)
@@ -87,35 +94,30 @@ float b2f(byte m0, byte m1, byte m2, byte m3) { // float 型解算为4个字节
   return f;
 }
 
-double angle_diff(double a, double b) {
-  double diff = a - b;
-  // 規範化到 [-π, π]
-  diff = fmod(diff + M_PI, 2 * M_PI) - M_PI;
-  return diff;
-}
-
-void imuCallback(const sensor_msgs::Imu::ConstPtr &msg) {
-  // 從四元數中提取 Yaw 角
-  tf::Quaternion quat;
-  tf::quaternionMsgToTF(msg->orientation, quat);
+void imuCallback(const sensor_msgs::Imu::ConstPtr& msg) {
+  tf::Quaternion q(
+    msg->orientation.x,
+    msg->orientation.y,
+    msg->orientation.z,
+    msg->orientation.w
+  );
+  tf::Matrix3x3 m(q);
   double roll, pitch, yaw;
-  tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
-
-  yaw = fmod(yaw + M_PI, 2 * M_PI) - M_PI;
-  current_yaw = yaw;
-  imu_data_valid = true; // 標記 IMU 數據有效
+  m.getRPY(roll, pitch, yaw); // 轉換為歐拉角 (rad)
+  current_yaw = yaw * 180.0 / M_PI; // 轉換為度 (deg)
 }
 
-void chatterCallback(const geometry_msgs::Twist::ConstPtr &msg) { // 获取键盘控制的回调函数
-  /* 四轮四驱 */ 
-  //	  ROS_INFO("X_linear: [%g]", msg.linear.x);
-  //    ROS_INFO("Y_linear: [%g]", msg.linear.y);
-  //    ROS_INFO("Z_linear: [%g]", msg.linear.z);
-  //    ROS_INFO("X_angular: [%g]", msg.angular.x);
-  //    ROS_INFO("Y_angular: [%g]", msg.angular.y);
-  //    ROS_INFO("Z_angular: [%g]", msg.angular.z);
+void chatterCallback(const geometry_msgs::Twist::ConstPtr& msg) {//获取键盘控制的回调函数
+  /*四轮四驱*/  
+  //	  ROS_INFO("X_linear: [%g]", msg.linear.x);//
+  //    ROS_INFO("Y_linear: [%g]", msg.linear.y);//
+  //    ROS_INFO("Z_linear: [%g]", msg.linear.z);//
+  //    ROS_INFO("X_angular: [%g]", msg.angular.x);//
+  //    ROS_INFO("Y_angular: [%g]", msg.angular.y);//
+  //    ROS_INFO("Z_angular: [%g]", msg.angular.z);//
   //    ROS_INFO("-------------");
-  // last_cmdvelcb_time = ros::Time::now();
+  static MotionState current_state = STOPPED;
+  static MotionState previous_state = STOPPED;
   new_message_received = true;
 
   x_mid_speed = msg->linear.x;   // X 方向速度目標
@@ -124,135 +126,117 @@ void chatterCallback(const geometry_msgs::Twist::ConstPtr &msg) { // 获取键�
   // 限制最大速度 1.1 m/s
   x_mid_speed = std::max(std::min(x_mid_speed, 1.1f), -1.1f);
   z_mid_angle = std::max(std::min(z_mid_angle, 1.1f), -1.1f);
-  
 
-  // 前進命令
-  if (x_mid_speed > 0 && z_mid_angle == 0) { // 按下 I 鍵，前進  
-    if (enable_straight_correction && imu_data_valid) {
-      if (!is_straight_moving || last_motion_direction != FORWARD) {
-        // 首次進入直線行駛或從其他模式切換，記錄初始 Yaw 角
-        is_straight_moving = true;
-        initial_yaw = current_yaw;
-        last_motion_direction = FORWARD;
-      }
-
-      // 計算 Yaw 角偏差（弧度）
-      double yaw_error = angle_diff(current_yaw, initial_yaw);
-
-      // 根據偏差計算補償量（若向右偏，yaw_error > 0，需左轉校正）
-      double compensation = -K * yaw_error;
-
-      speed_A = x_mid_speed * (1 + compensation);
-      speed_B = x_mid_speed; 
-      speed_C = x_mid_speed; 
-      speed_D = x_mid_speed * (1 + compensation);
+  if (z_mid_angle != 0) {
+    current_state = OTHER;
+  } else {
+    if (x_mid_speed > 0) {
+      current_state = FORWARD;
+    } else if (x_mid_speed < 0) {
+      current_state = BACKWARD;
     } else {
-      speed_A = x_mid_speed;
-      speed_B = x_mid_speed; 
-      speed_C = x_mid_speed; 
-      speed_D = x_mid_speed;
-    }
-
-    // ROS_INFO("Forward - Yaw Error: %.2f rad, Compensation: %.2f", yaw_error, compensation);
-  }
-  // 後退命令
-  else if (x_mid_speed < 0 && z_mid_angle == 0) { // 按下 < 鍵，後退
-    if (enable_straight_correction && imu_data_valid) {
-      if (!is_straight_moving || last_motion_direction != BACKWARD) {
-        // 首次進入直線行駛或從其他模式切換，記錄初始 Yaw 角
-        is_straight_moving = true;
-        initial_yaw = current_yaw;
-        last_motion_direction = BACKWARD;
-      }
-
-      // 計算 Yaw 角偏差（弧度）
-      double yaw_error = angle_diff(current_yaw, initial_yaw);
-
-      // 根據偏差計算補償量（若向右偏，yaw_error > 0，需左轉校正）
-      double compensation = -K * yaw_error;
-
-      speed_A = x_mid_speed;
-      speed_B = x_mid_speed * (1 + compensation); 
-      speed_C = x_mid_speed * (1 + compensation); 
-      speed_D = x_mid_speed;
-    } else {
-      speed_A = x_mid_speed;
-      speed_B = x_mid_speed; 
-      speed_C = x_mid_speed; 
-      speed_D = x_mid_speed;
-    }
-
-    // ROS_INFO("Backward - Yaw Error: %.2f rad, Compensation: %.2f", yaw_error, compensation);
-  }
-  // 其他命令（旋轉、斜向移動、停止）
-  else {
-    is_straight_moving = false;
-    last_motion_direction = NONE;
-
-    if (x_mid_speed == 0 && z_mid_angle > 0) { // 按下 J 鍵，左自轉
-      speed_A = z_mid_angle * 0.5F;
-      speed_B = -z_mid_angle * 0.5F; 
-      speed_C = -z_mid_angle * 0.5F; 
-      speed_D = z_mid_angle * 0.5F;
-    } else if (x_mid_speed == 0 && z_mid_angle < 0) { // 按下 L 鍵，右自轉
-      speed_A = z_mid_angle * 0.5F;
-      speed_B = -z_mid_angle * 0.5F; 
-      speed_C = -z_mid_angle * 0.5F; 
-      speed_D = z_mid_angle * 0.5F;
-    } else if (x_mid_speed > 0 && z_mid_angle > 0) { // 按下 U 鍵，左斜上
-      speed_A = x_mid_speed * 1.1F;
-      speed_B = x_mid_speed * 0.9F;
-      speed_C = x_mid_speed * 0.7F;
-      speed_D = x_mid_speed * 1.0F;
-    } else if (x_mid_speed > 0 && z_mid_angle < 0) { // 按下 O 鍵，右斜上
-      speed_B = x_mid_speed * 1.1F;
-      speed_A = x_mid_speed * 0.9F; 
-      speed_D = x_mid_speed * 0.7F;
-      speed_C = x_mid_speed * 1.0F;
-    } else if (x_mid_speed < 0 && z_mid_angle < 0) { // 按下 M 鍵，左斜下
-      speed_A = x_mid_speed;
-      speed_B = x_mid_speed * 0.7F;
-      speed_C = x_mid_speed * 0.5F;
-      speed_D = x_mid_speed * 0.95F;
-    } else if (x_mid_speed < 0 && z_mid_angle > 0) { // 按下 > 鍵，右斜下
-      speed_B = x_mid_speed;
-      speed_A = x_mid_speed * 0.7F; 
-      speed_D = x_mid_speed * 0.5F;
-      speed_C = x_mid_speed * 0.95F;
-    } else if (x_mid_speed == 0 && z_mid_angle == 0) { // 停止
-      speed_A = 0;
-      speed_B = 0;
-      speed_C = 0;
-      speed_D = 0;
+      current_state = STOPPED;
     }
   }
+
+  if (current_state != previous_state) {
+    ROS_INFO("Motion state changed to %d", current_state);
+    target_yaw = current_yaw;
+    integral = 0.0;
+  }
+
+  if (x_mid_speed!=0 && z_mid_angle==0) {//按下 I 键 //按下 < 键 
+
+    if (dt > 0) {
+      // 處理角度循環性 (-180° 到 180°)
+      double error = fmod(target_yaw - current_yaw + M_PI, 2 * M_PI) - M_PI;
+      ROS_INFO("Forward Error:\t%.2f", error);
+
+      integral += error * dt;
+      double derivative = (error - previous_error) / dt;
+      double u = Kp * error + Ki * integral + Kd * derivative;
+      previous_error = error;
+
+      // 調整輪速 (假設 A、D 為右輪，B、C 為左輪)
+      if (!straight_correction) // 不使用直線校正
+        u = 0;
+      double base_speed = x_mid_speed;
+      speed_A = base_speed + u; // 右輪
+      speed_D = base_speed + u; // 右輪
+      speed_B = base_speed - u; // 左輪
+      speed_C = base_speed - u; // 左輪
+    }
+
+  }//前进 //後退
+  else if (x_mid_speed==0 && z_mid_angle!=0) {//按下 J 键 //按下 L 键
+    speed_A= z_mid_angle*0.5F;
+    speed_B= -z_mid_angle*0.5F; 
+    speed_C= -z_mid_angle*0.5F; 
+    speed_D= z_mid_angle*0.5F;
+    //  printf("j"); 
+  }//左自传 //右自传
+  else if (x_mid_speed>0 && z_mid_angle>0) {//按下 U 键
+    speed_A= x_mid_speed*1.1F;
+    speed_B= x_mid_speed*0.9F; //0.7F 
+    speed_C= x_mid_speed*0.7F; //0.5F
+    speed_D= x_mid_speed*1.0F;  //0.95F
+    //  printf("u"); 
+  }//左斜上
+  else if (x_mid_speed>0 && z_mid_angle<0) {//按下 O 键
+    speed_A= x_mid_speed*0.9F; 
+    speed_B= x_mid_speed*1.1F;
+    speed_C= x_mid_speed*1.0F; 
+    speed_D= x_mid_speed*0.7F;
+    //  printf("o"); 
+  }//右斜上
+  else if (x_mid_speed<0 && z_mid_angle<0) {//按下 M 键
+    speed_A= x_mid_speed;
+    speed_B= x_mid_speed*0.7F; 
+    speed_C= x_mid_speed*0.5F; 
+    speed_D= x_mid_speed*0.95F; 
+    //  printf("m"); 
+  }//左斜下
+  else if (x_mid_speed<0 && z_mid_angle>0) {//按下 > 键
+    speed_A= x_mid_speed*0.7F; 
+    speed_B= x_mid_speed;
+    speed_C= x_mid_speed*0.95F;
+    speed_D= x_mid_speed*0.5F;
+    //  printf(">"); 
+  }//右斜下
   
-  if (x_mid_speed == 0 && z_mid_angle == 0) {
+  if (x_mid_speed==0 && z_mid_angle==0) {
+    speed_A = 0;
+    speed_B = 0;
+    speed_C = 0;
+    speed_D = 0;
     Flag_start = 0;
   } else {
     Flag_start = 1;
-    FLAG_USART = 5;
   }
 
+  previous_state = current_state;
 }
 
 
 int main(int argc, char **argv){
 
   ros::init(argc, argv, "listener");
-  ros::NodeHandle np, private_np("~");  //为这个进程的节点创建一个句柄
+  ros::NodeHandle np, private_np("~");//为这个进程的节点创建一个句柄
 
   private_np.param<string>("port", port, "/dev/ttyUSB0");
   private_np.param<int>("rate", rate, 200);
-  private_np.param<bool>("straight_correction", enable_straight_correction, false);
-  private_np.param<double>("K", K, 0.5);
+  private_np.param<bool>("straight_correction", straight_correction, false);
+  private_np.param<bool>("external_imu", external_imu, false);
+  private_np.param<double>("Kp", Kp, 0.035);
+  private_np.param<double>("Ki", Ki, 0.05);
+  private_np.param<double>("Kd", Kd, 0.0);
   private_np.param<string>("topic_cmd_vel", topic_cmd_vel, "cmd_vel");
-  private_np.param<string>("topic_odom", topic_odom, "odom");
   private_np.param<string>("topic_imu", topic_imu, "/imu/data");
+  private_np.param<string>("topic_odom", topic_odom, "odom");
   private_np.param<bool>("publish_tf", publish_tf, true);
 
-  ros::Subscriber sub = np.subscribe(topic_cmd_vel, 1000, chatterCallback); //订阅键盘控制
-  ros::Subscriber imu_sub = np.subscribe(topic_imu, 1000, imuCallback);
+  ros::Subscriber sub = np.subscribe(topic_cmd_vel, 1000, chatterCallback);//订阅键盘控制
+  ros::Subscriber imu_sub = np.subscribe(topic_imu, 10, imuCallback);
 
   ros::init(argc, argv, "odometry_publisher");
   ros::NodeHandle n;
@@ -262,18 +246,19 @@ int main(int argc, char **argv){
 
   tf::TransformBroadcaster odom_broadcaster;
 
+
   double x = 0.0;
   double y = 0.0;
   double th = 0.0;
-
+ 
   double vx = 0.0;
   double vy = 0.0;
   double vth = 0.0;
 
-  ros::Time current_time, last_time;
+
   current_time = ros::Time::now();
   last_time = ros::Time::now();
-  // last_cmdvelcb_time = ros::Time::now();
+
 
   //创建timeout
   serial::Timeout to = serial::Timeout::simpleTimeout(100);
@@ -283,11 +268,11 @@ int main(int argc, char **argv){
   sp.setBaudrate(115200);
   //串口设置timeout
   sp.setTimeout(to);
-
+ 
   try {
     //打开串口
     sp.open();
-  } catch (serial::IOException& e) {
+  } catch(serial::IOException& e) {
     ROS_ERROR_STREAM("Unable to open port.");
     return -1;
   }
@@ -297,16 +282,17 @@ int main(int argc, char **argv){
     ROS_INFO_STREAM(port << "is opened.");
   } else {
     return -1;
-  }  
-  
+  }
+
   memset(Data_US, 0, sizeof(uint8_t)*12);
-  for (uint8_t j=0;j<3;j++) {
-    send_data();
+  for(uint8_t j=0;j<3;j++) {
+    send_data(); 
     ros::Duration(0.1).sleep(); //
-  }		
+  }
 
   ros::Rate loop_rate(rate);//设置循环间隔，即代码执行频率 200 HZ
-  while(ros::ok()) {
+
+  while (ros::ok()) {
     new_message_received = false;
     if (Flag_OK==1) {
       float angular_velocity_x = Data_UR[1]*0.001064;//角速度转换成 rad/s
@@ -315,10 +301,10 @@ int main(int argc, char **argv){
       float accelerated_speed_x = Data_UR[4]/16384;//转换成 g	,重力加速度定义为1g, 等于9.8米每平方秒
       float accelerated_speed_y = Data_UR[5]/16384;//转换成 g	,重力加速度定义为1g, 等于9.8米每平方秒
       float accelerated_speed_z = Data_UR[6]/16384;//转换成 g	,重力加速度定义为1g, 等于9.8米每平方秒
-
-
-      // 设定车子正负方向 ，车子前进方向为X正，后退为X负，左移为Y正，右移为Y负
-      // 轮子从上往下看，逆时针转为正角度，顺时针转为负角度
+		 
+		 
+      //设定车子正负方向 ，车子前进方向为X正，后退为X负，左移为Y正，右移为Y负
+      //轮子从上往下看，逆时针转为正角度，顺时针转为负角度
       float Power_A_X =	+Data_UR[8] ;    //A轮X方向速度
       float Power_A_Y =	0 ;    //A轮Y方向速度
 
@@ -331,26 +317,26 @@ int main(int argc, char **argv){
       float Power_D_X =	+Data_UR[11] ;    //D轮X方向速度
       float Power_D_Y =	0 ;    //A轮Y方向速度	
 
-      Roll = Data_UR[13];
-      Pitch = Data_UR[14];
       Yaw = Data_UR[7];
-    	
-      vx = (Power_A_X + Power_B_X + Power_C_X + Power_D_X)/4 ;//底盘当前X方向线速度 m/s	
-      vy = (Power_A_Y + Power_B_Y + Power_C_Y + Power_D_Y)/4 ;//底盘当前Y方向线速度 m/s	
+    	    
+      vx  = (Power_A_X + Power_B_X + Power_C_X + Power_D_X)/4 ;//底盘当前X方向线速度 m/s	
+      vy  = (Power_A_Y + Power_B_Y + Power_C_Y + Power_D_Y)/4 ;//底盘当前Y方向线速度 m/s	
       vth = angular_velocity_z;//设备当前Z轴角速度 rad/s
 
       current_time = ros::Time::now();//记录当前时间
+		
       //以给定机器人速度的典型方式计算里程计
-      double dt = (current_time - last_time).toSec();
+      dt = (current_time - last_time).toSec();
+      
       double delta_x = (vx * cos(Yaw_error*to_rad) - vy * sin(Yaw_error*to_rad)) * dt;
       double delta_y = (vx * sin(Yaw_error*to_rad) + vy * cos(Yaw_error*to_rad)) * dt;
-      // double delta_th = vth * dt;
+      //   double delta_th = vth * dt;
+
 
       static uint8_t only = 0;
       if(only == 0) Yaw_zero = Yaw, only = 1; //每次运行记录一次初始角度作为零点
 
       Yaw_error = Yaw - Yaw_zero; //当前角度值减去初始角度值
-
       x += delta_x;//X轴速度累积位移 m
       y += delta_y;//Y轴速度累积位移 m
       // th += delta_th;//Z轴角速度累积求车体朝向角度  rad //存在漂移
@@ -359,10 +345,12 @@ int main(int argc, char **argv){
 
       //因为所有的里程表都是6自由度的，所以我们需要一个由偏航创建的四元数
       geometry_msgs::Quaternion odom_quat = tf::createQuaternionMsgFromYaw(th);
+
+ 
       //首先，我们将通过tf发布转换
       geometry_msgs::TransformStamped odom_trans;
       odom_trans.header.stamp = current_time;
-      odom_trans.header.frame_id = topic_odom;
+      odom_trans.header.frame_id = "odom";
       odom_trans.child_frame_id = "base_link";
 
       odom_trans.transform.translation.x = x;
@@ -379,7 +367,7 @@ int main(int argc, char **argv){
       //接下来，我们将通过ROS发布里程计信息
       nav_msgs::Odometry odom;
       odom.header.stamp = current_time;
-      odom.header.frame_id = topic_odom;
+      odom.header.frame_id = "odom";
 
       //设置位置
       odom.pose.pose.position.x = x;
@@ -413,84 +401,97 @@ int main(int argc, char **argv){
       last_time = current_time;//保存为上次时间
     }
 
-    ros::spinOnce();//执行回调处理函数，完后继续往下执行
 
+
+    ros::spinOnce();//执行回调处理函数，完后继续往下执行
+				
 
     // if (new_message_received) ROS_INFO("New /cmd_vel message received!");
     // else if (!new_message_received) ROS_WARN("No new /cmd_vel messages received.");
 
     if (new_message_received) {
       count_2=0;
-
-    //若接收到键盘控制，则发送数据到下位机，同时接收下位机发送上来的数据		
-    /*四轮四驱差速*/ 
-    /*<01>*/Data_US[0]  = Flag_start;//电机启动开关，1启动 0停止
-    /*<02>*/Data_US[1]  = speed_A; 
-    /*<03>*/Data_US[2]  = speed_B ; 
-    /*<04>*/Data_US[3]  = speed_C ; 
-    /*<05>*/Data_US[4]  = speed_D ; //ABCD四轮的当前线速度 m/s
-    /*<06>*/Data_US[5]  = 0 ;//预留位 
-    /*<07>*/Data_US[6]  = 0 ;//预留位     
-    /*<08>*/Data_US[7]  = 0 ;//预留位     
-    /*<09>*/Data_US[8]  = 0 ;//预留位 
-    /*<10>*/Data_US[9]  = 0 ;//预留位  
-    /*<11>*/Data_US[10] = 0 ;//预留位 
-    /*<12>*/Data_US[11] = 0 ;//预留位				 
-    //  if(FLAG_USART>0)FLAG_USART--;
-    //  if((current_time - last_cmdvelcb_time).toSec() > 0.3){Data_US[1]=0;Data_US[2]=0;Data_US[3]=0;Data_US[4]=0;}
-
+            
+      //若接收到键盘控制，则发送数据到下位机，同时接收下位机发送上来的数据		
+      /*四轮四驱差速*/	
+      /*<01>*/Data_US[0]  = Flag_start;//电机启动开关，1启动 0停止
+      /*<02>*/Data_US[1]  = speed_A; 
+      /*<03>*/Data_US[2]  = speed_B ; 
+      /*<04>*/Data_US[3]  = speed_C ; 
+      /*<05>*/Data_US[4]  = speed_D ; //ABCD四轮的当前线速度 m/s
+      /*<06>*/Data_US[5]  = 0 ;//预留位 
+      /*<07>*/Data_US[6]  = 0 ;//预留位 
+      /*<08>*/Data_US[7]  = 0 ;//预留位 
+      /*<09>*/Data_US[8]  = 0 ;//预留位 
+      /*<10>*/Data_US[9]  = 0 ;//预留位 
+      /*<11>*/Data_US[10] = 0 ;//预留位 
+      /*<12>*/Data_US[11] = 0 ;//预留位 
+      
+      ROS_WARN("Speed_A: %.2f", speed_A);
+      ROS_WARN("Speed_B: %.2f", speed_B);
+      ROS_WARN("Speed_C: %.2f", speed_C);
+      ROS_WARN("Speed_D: %.2f", speed_D);
       send_data(); //发送指令控制电机运行
     } else if (!new_message_received) {  //當沒有收到/cmd_vel新的訊息以後，就停止運動
       count_2++;
       if (count_2 > 50) {
-    /*<01>*/Data_US[0]  = Flag_start;//电机启动开关，1启动 0停止
-    /*<02>*/Data_US[1]  = 0; 
-    /*<03>*/Data_US[2]  = 0; 
-    /*<04>*/Data_US[3]  = 0; 
-    /*<05>*/Data_US[4]  = 0; //ABCD四轮的当前线速度 m/s
-    /*<06>*/Data_US[5]  = 0;//预留位 
-    /*<07>*/Data_US[6]  = 0;//预留位     
-    /*<08>*/Data_US[7]  = 0;//预留位     
-    /*<09>*/Data_US[8]  = 0;//预留位 
-    /*<10>*/Data_US[9]  = 0;//预留位  
-    /*<11>*/Data_US[10] = 0;//预留位 
-    /*<12>*/Data_US[11] = 0;//预留位
+        /*<01>*/Data_US[0]  = Flag_start;//电机启动开关，1启动 0停止
+        /*<02>*/Data_US[1]  = 0; 
+        /*<03>*/Data_US[2]  = 0; 
+        /*<04>*/Data_US[3]  = 0; 
+        /*<05>*/Data_US[4]  = 0; //ABCD四轮的当前线速度 m/s
+        /*<06>*/Data_US[5]  = 0;//预留位 
+        /*<07>*/Data_US[6]  = 0;//预留位     
+        /*<08>*/Data_US[7]  = 0;//预留位     
+        /*<09>*/Data_US[8]  = 0;//预留位 
+        /*<10>*/Data_US[9]  = 0;//预留位  
+        /*<11>*/Data_US[10] = 0;//预留位 
+        /*<12>*/Data_US[11] = 0;//预留位
+
         send_data();
       }	
     }
 
-		//获取下位机的数据				
+		
+    //获取下位机的数据				
     size_t n = sp.available();//获取缓冲区内的字节数
     a++;
-    if (n>0) {
+    if (n>0) {		   
       uint8_t buffer[64];uint8_t buf[64];
-
+           
       if (n>=130) {
-        while (n) {n = sp.available();if(n>=130)sp.read(buf, 62);else {break;}}//砍掉旧缓存，获取最新数据
-      }                 
-      
+        while (n) {
+          n = sp.available();
+          if (n>=130) 
+            sp.read(buf, 62);
+          else {
+            break;
+          }
+        }//砍掉旧缓存，获取最新数据                   
+      }
       if (n>=65 && n<130) {
         for (uint8_t i=0;i<n;i++) {
-          if(buffer[0]!=0XAA) sp.read(buffer, 1);
+          if(buffer[0]!=0XAA)
+            sp.read(buffer, 1);
           else {break;} 
-        } //逐个读字节，读到帧头跳出
+        }//逐个读字节，读到帧头跳出
       }
-
       if (buffer[0]==0XAA) { //
         sp.read(buffer, 64);//读出64个字节                   
-        if (buffer[0]==0XAA && buffer[1]==0XF1) {              
-          uint8_t sum=0; 
-          for (uint8_t j=0;j<63;j++) sum+=buffer[j];    //计算校验和	
+        if (buffer[0]==0XAA && buffer[1]==0XF1) {
+          uint8_t sum=0;
+          for (uint8_t j=0;j<63;j++)
+            sum+=buffer[j];    //计算校验和
           if (buffer[63] == (uint8_t) sum+buffer[0]) {
             b++;
             Flag_OK=1;
-
-            for (uint8_t i=0;i<15;i++) { //15个数据
+            for (uint8_t i=0;i<15;i++) {//15个数据
 			        Data_UR[i] = b2f( buffer[4*i+3], buffer[4*i+4], buffer[4*i+5], buffer[4*i+6] );
-            }
-	        }
+            }	                       										 				              				
+          } 			  						
         }
-        buffer[0]=0Xff;buffer[1]=0Xff;
+        buffer[0]=0Xff;
+        buffer[1]=0Xff;
       }
 
     }
@@ -511,56 +512,48 @@ int main(int argc, char **argv){
     /*<13>*///Data_UR[13]; //预留
     /*<14>*///Data_UR[14]; //预留
 
-    count_1++;
-    if (count_1>6) { //显示频率降低为10HZ
-      count_1=0;
-      if ((uint8_t)Data_UR[0]==1) {
-        ROS_INFO("[00] Flag_start: [%u ]", (uint8_t)Data_UR[0]);
-        ROS_INFO("[00] Flag_start: ON");
-      } //下位机电机启动/停止标志，1启动，0停止
-      if ((uint8_t)Data_UR[0]==0) {
-        ROS_INFO("[00] Flag_start: [%u ]", (uint8_t)Data_UR[0]);
-        ROS_INFO("[00] Flag_start: OFF");
-      } //下位机电机启动/停止标志，1启动，0停止
+    if ((uint8_t)Data_UR[0]==1) {
+      // ROS_INFO("[00] Flag_start: [%u ]", (uint8_t)Data_UR[0]);
+      // ROS_INFO("[00] Flag_start: ON");
+    }//下位机电机启动/停止标志，1启动，0停止
+    if ((uint8_t)Data_UR[0]==0) {
+      // ROS_INFO("[00] Flag_start: [%u ]", (uint8_t)Data_UR[0]);
+      // ROS_INFO("[00] Flag_start: OFF");
+    }//下位机电机启动/停止标志，1启动，0停止
 
-      ROS_INFO("[01] gyro_Roll: [%d ]",  (int)Data_UR[1]); //X轴角速度原始数据 gyro_Roll
-      ROS_INFO("[02] gyro_Pitch: [%d ]", (int)Data_UR[2]); //Y轴角速度原始数据 gyro_Pitch
-      ROS_INFO("[03] gyro_Yaw: [%d ]",   (int)Data_UR[3]); //Z轴角速度原始数据 gyro_Yaw
+    // ROS_INFO("[01] gyro_Roll: [%d ]",  (int)Data_UR[1]); //X轴角速度原始数据 gyro_Roll
+    // ROS_INFO("[02] gyro_Pitch: [%d ]", (int)Data_UR[2]); //Y轴角速度原始数据 gyro_Pitch
+    // ROS_INFO("[03] gyro_Yaw: [%d ]",   (int)Data_UR[3]); //Z轴角速度原始数据 gyro_Yaw
 
-      ROS_INFO("[04] accel_x: [%d ]",  (int)Data_UR[4]); //X轴加速度原始数据 accel_x
-      ROS_INFO("[05] accel_y: [%d ]",  (int)Data_UR[5]); //Y轴加速度原始数据 accel_x
-      ROS_INFO("[06] accel_z: [%d ]",  (int)Data_UR[6]); //Z轴加速度原始数据 accel_x
+    // ROS_INFO("[04] accel_x: [%d ]",  (int)Data_UR[4]); //X轴加速度原始数据 accel_x
+    // ROS_INFO("[05] accel_y: [%d ]",  (int)Data_UR[5]); //Y轴加速度原始数据 accel_x
+    // ROS_INFO("[06] accel_z: [%d ]",  (int)Data_UR[6]); //Z轴加速度原始数据 accel_x 				 
 
-      ROS_INFO("[07] Yaw: [%.2f deg]",  Data_UR[7]); //绕Z轴角度 deg
+    // ROS_INFO("[07] Yaw: [%.2f deg]",  Data_UR[7]); //绕Z轴角度 deg
+        
+    // ROS_INFO("[08] Current_linear_A: [%.2f m/s]", +Data_UR[8]); //A轮线速度 m/s
+    // ROS_INFO("[09] Current_linear_B: [%.2f m/s]", -Data_UR[9]); //B轮线速度 m/s 
+    // ROS_INFO("[10] Current_linear_C: [%.2f m/s]", -Data_UR[10]); //C轮线速度 m/s 
+    // ROS_INFO("[11] Current_linear_D: [%.2f m/s]", +Data_UR[11]); //D轮线速度 m/s 	 							
 
-      ROS_INFO("[08] Current_linear_A: [%.2f m/s]", +Data_UR[8]); //A轮线速度 m/s
-      ROS_INFO("[09] Current_linear_B: [%.2f m/s]", -Data_UR[9]); //B轮线速度 m/s
-      ROS_INFO("[10] Current_linear_C: [%.2f m/s]", -Data_UR[10]); //C轮线速度 m/s
-      ROS_INFO("[11] Current_linear_D: [%.2f m/s]", +Data_UR[11]); //D轮线速度 m/s
+    // ROS_INFO("[12] Voltage: [%.2f V]", Data_UR[12]/100); // 电池电压
+    // ROS_INFO("[13] Roll: [%.2f deg]", Data_UR[13]); //绕X轴角度 deg
+    // ROS_INFO("[14] Pitch: [%.2f deg]", Data_UR[14]); //绕Y轴角度 deg													
+                  
+    // ROS_INFO("a: [%d ]",   a);
+    // ROS_INFO("b: [%d ]",   b);                       
+    // ROS_INFO("a/b: [%.2f ]",   (float)a/(float)b);
+    // ROS_INFO("-----------------------"); 
+    if(b>5000)
+      b=b/10,a=a/10;
 
-      ROS_INFO("[12] Voltage: [%.2f V]", Data_UR[12]/100); // 电池电压
-      ROS_INFO("[13] Roll: [%.2f deg]", Data_UR[13]); //绕X轴角度 deg
-      ROS_INFO("[14] Pitch: [%.2f deg]", Data_UR[14]); //绕Y轴角度 deg
-
-      ROS_INFO("a: [%d ]",   a);
-      ROS_INFO("b: [%d ]",   b);
-      ROS_INFO("a/b: [%.2f ]",   (float)a/(float)b);
-      ROS_INFO("-----------------------"); 
-      
-      if (b>5000) b=b/10, a=a/10;
-    }
-
-    count_3++;
-    if (count_3 > 20) {
-      int number = round(Data_UR[12]);
-      voltage.data = (double)number/100;
-      power_voltage_pub.publish(voltage);
-      count_3=0;
-    }
-
+    
+    voltage.data = (double) round(Data_UR[12]) / 100;
+    power_voltage_pub.publish(voltage);
+    
     loop_rate.sleep();//循环延时时间
   }
-
+  
 
   memset(Data_US, 0, sizeof(uint8_t)*12);
   for (uint8_t j=0;j<3;j++) {
@@ -576,7 +569,6 @@ int main(int argc, char **argv){
 
 
 //************************发送12个数据**************************// 
-
 void send_data(void) {
   uint8_t len=12;
   uint8_t tbuf[53];
@@ -590,7 +582,6 @@ void send_data(void) {
     tbuf[4*i+6]=(unsigned char)(*(p+1));
     tbuf[4*i+7]=(unsigned char)(*(p+0));
   }
-
   //fun:功能字 0XA0~0XAF
   //data:数据缓存区，48字节
   //len:data区有效数据个数
@@ -600,10 +591,12 @@ void send_data(void) {
   tbuf[1]=0XAA;     //帧头
   tbuf[2]=0XF1;     //功能字
   tbuf[3]=len*4;    //数据长度
-  for (uint8_t i=0;i<(len*4+4);i++) tbuf[len*4+4]+=tbuf[i]; //计算和校验
+  for (uint8_t i=0;i<(len*4+4);i++)
+    tbuf[len*4+4]+=tbuf[i]; //计算和校验
+
   try {
     sp.write(tbuf, len*4+5);//发送数据下位机(数组，字节数)
   } catch (serial::IOException& e) {
     ROS_ERROR_STREAM("Unable to send data through serial port"); //如果发送数据失败，打印错误信息
   }
-}  
+}
