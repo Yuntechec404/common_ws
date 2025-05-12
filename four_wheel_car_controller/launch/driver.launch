@@ -1,7 +1,8 @@
 <launch>
     <node name="listener" pkg="four_wheel_car_controller" type="car_controller" output="screen">
-        <param name="port" type="str" value="/dev/ttyUSB0"/>    <!-- 設備埠號 -->
-        <param name="rate" type="int" value="50"/>              <!-- 執行頻率 -->
+        <param name="port"  type="str" value="/dev/ttyUSB0"/>   <!-- 設備埠號 -->
+        <param name="rate"  type="int" value="50"/>             <!-- 執行頻率 -->
+        <param name="debug"   type="bool" value="false" />      <!-- 發佈日誌 -->
         
         <param name="straight_correction" type="bool" value="true"/>    <!-- 啟用直線補償 -->
         <param name="external_imu" type="bool" value="false"/>          <!-- 使用外部陀螺儀 -->

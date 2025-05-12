@@ -17,6 +17,7 @@
 using namespace std;
 //创建一个serial类
 serial::Serial sp;
+bool debug = true;
 
 #define to_rad 0.01745329f  //角度转弧度
 
@@ -140,8 +141,11 @@ void chatterCallback(const geometry_msgs::Twist::ConstPtr& msg) {//获取键盘�
   }
 
   if (current_state != previous_state) {
-    ROS_INFO("Motion state changed to %d", current_state);
-    target_yaw = current_yaw;
+    // ROS_INFO("Motion state changed to %d", current_state);
+    if (!external_imu)
+      target_yaw = Yaw;
+    else
+      target_yaw = current_yaw;
     integral = 0.0;
   }
 
@@ -149,8 +153,12 @@ void chatterCallback(const geometry_msgs::Twist::ConstPtr& msg) {//获取键盘�
 
     if (dt > 0) {
       // 處理角度循環性 (-180° 到 180°)
-      double error = fmod(target_yaw - current_yaw + M_PI, 2 * M_PI) - M_PI;
-      ROS_INFO("Forward Error:\t%.2f", error);
+      double error;
+      if (!external_imu)
+        error = fmod(target_yaw - Yaw + M_PI, 2 * M_PI) - M_PI;
+      else
+        error = fmod(target_yaw - current_yaw + M_PI, 2 * M_PI) - M_PI;
+      // ROS_INFO("Straight Error:\t%.2f", error);
 
       integral += error * dt;
       double derivative = (error - previous_error) / dt;
@@ -218,13 +226,14 @@ void chatterCallback(const geometry_msgs::Twist::ConstPtr& msg) {//获取键盘�
 }
 
 
-int main(int argc, char **argv){
+int main(int argc, char **argv) {
 
   ros::init(argc, argv, "listener");
   ros::NodeHandle np, private_np("~");//为这个进程的节点创建一个句柄
 
   private_np.param<string>("port", port, "/dev/ttyUSB0");
   private_np.param<int>("rate", rate, 200);
+  private_np.param<bool>("debug", debug, true);
   private_np.param<bool>("straight_correction", straight_correction, false);
   private_np.param<bool>("external_imu", external_imu, false);
   private_np.param<double>("Kp", Kp, 0.035);
@@ -236,7 +245,8 @@ int main(int argc, char **argv){
   private_np.param<bool>("publish_tf", publish_tf, true);
 
   ros::Subscriber sub = np.subscribe(topic_cmd_vel, 1000, chatterCallback);//订阅键盘控制
-  ros::Subscriber imu_sub = np.subscribe(topic_imu, 10, imuCallback);
+  if (external_imu)
+    ros::Subscriber imu_sub = np.subscribe(topic_imu, 10, imuCallback);
 
   ros::init(argc, argv, "odometry_publisher");
   ros::NodeHandle n;
@@ -279,7 +289,7 @@ int main(int argc, char **argv){
     
   //判断串口是否打开成功
   if (sp.isOpen()) {
-    ROS_INFO_STREAM(port << "is opened.");
+    ROS_INFO_STREAM(port << " is opened.");
   } else {
     return -1;
   }
@@ -427,10 +437,10 @@ int main(int argc, char **argv){
       /*<11>*/Data_US[10] = 0 ;//预留位 
       /*<12>*/Data_US[11] = 0 ;//预留位 
       
-      ROS_WARN("Speed_A: %.2f", speed_A);
-      ROS_WARN("Speed_B: %.2f", speed_B);
-      ROS_WARN("Speed_C: %.2f", speed_C);
-      ROS_WARN("Speed_D: %.2f", speed_D);
+      // ROS_WARN("Speed_A: %.2f", speed_A);
+      // ROS_WARN("Speed_B: %.2f", speed_B);
+      // ROS_WARN("Speed_C: %.2f", speed_C);
+      // ROS_WARN("Speed_D: %.2f", speed_D);
       send_data(); //发送指令控制电机运行
     } else if (!new_message_received) {  //當沒有收到/cmd_vel新的訊息以後，就停止運動
       count_2++;
@@ -512,38 +522,41 @@ int main(int argc, char **argv){
     /*<13>*///Data_UR[13]; //预留
     /*<14>*///Data_UR[14]; //预留
 
-    if ((uint8_t)Data_UR[0]==1) {
-      // ROS_INFO("[00] Flag_start: [%u ]", (uint8_t)Data_UR[0]);
-      // ROS_INFO("[00] Flag_start: ON");
-    }//下位机电机启动/停止标志，1启动，0停止
-    if ((uint8_t)Data_UR[0]==0) {
-      // ROS_INFO("[00] Flag_start: [%u ]", (uint8_t)Data_UR[0]);
-      // ROS_INFO("[00] Flag_start: OFF");
-    }//下位机电机启动/停止标志，1启动，0停止
+    if (debug) {
+      if ((uint8_t)Data_UR[0]==1) {
+        ROS_INFO("[00] Flag_start: [%u ]", (uint8_t)Data_UR[0]);
+        ROS_INFO("[00] Flag_start: ON");
+      }//下位机电机启动/停止标志，1启动，0停止
+      if ((uint8_t)Data_UR[0]==0) {
+        ROS_INFO("[00] Flag_start: [%u ]", (uint8_t)Data_UR[0]);
+        ROS_INFO("[00] Flag_start: OFF");
+      }//下位机电机启动/停止标志，1启动，0停止
 
-    // ROS_INFO("[01] gyro_Roll: [%d ]",  (int)Data_UR[1]); //X轴角速度原始数据 gyro_Roll
-    // ROS_INFO("[02] gyro_Pitch: [%d ]", (int)Data_UR[2]); //Y轴角速度原始数据 gyro_Pitch
-    // ROS_INFO("[03] gyro_Yaw: [%d ]",   (int)Data_UR[3]); //Z轴角速度原始数据 gyro_Yaw
+      ROS_INFO("[01] gyro_Roll: [%d ]",  (int)Data_UR[1]); //X轴角速度原始数据 gyro_Roll
+      ROS_INFO("[02] gyro_Pitch: [%d ]", (int)Data_UR[2]); //Y轴角速度原始数据 gyro_Pitch
+      ROS_INFO("[03] gyro_Yaw: [%d ]",   (int)Data_UR[3]); //Z轴角速度原始数据 gyro_Yaw
 
-    // ROS_INFO("[04] accel_x: [%d ]",  (int)Data_UR[4]); //X轴加速度原始数据 accel_x
-    // ROS_INFO("[05] accel_y: [%d ]",  (int)Data_UR[5]); //Y轴加速度原始数据 accel_x
-    // ROS_INFO("[06] accel_z: [%d ]",  (int)Data_UR[6]); //Z轴加速度原始数据 accel_x 				 
+      ROS_INFO("[04] accel_x: [%d ]",  (int)Data_UR[4]); //X轴加速度原始数据 accel_x
+      ROS_INFO("[05] accel_y: [%d ]",  (int)Data_UR[5]); //Y轴加速度原始数据 accel_x
+      ROS_INFO("[06] accel_z: [%d ]",  (int)Data_UR[6]); //Z轴加速度原始数据 accel_x
 
-    // ROS_INFO("[07] Yaw: [%.2f deg]",  Data_UR[7]); //绕Z轴角度 deg
-        
-    // ROS_INFO("[08] Current_linear_A: [%.2f m/s]", +Data_UR[8]); //A轮线速度 m/s
-    // ROS_INFO("[09] Current_linear_B: [%.2f m/s]", -Data_UR[9]); //B轮线速度 m/s 
-    // ROS_INFO("[10] Current_linear_C: [%.2f m/s]", -Data_UR[10]); //C轮线速度 m/s 
-    // ROS_INFO("[11] Current_linear_D: [%.2f m/s]", +Data_UR[11]); //D轮线速度 m/s 	 							
+      ROS_INFO("[07] Yaw: [%.2f deg]",  Data_UR[7]); //绕Z轴角度 deg
+          
+      ROS_INFO("[08] Current_linear_A: [%.2f m/s]", +Data_UR[8]); //A轮线速度 m/s
+      ROS_INFO("[09] Current_linear_B: [%.2f m/s]", -Data_UR[9]); //B轮线速度 m/s
+      ROS_INFO("[10] Current_linear_C: [%.2f m/s]", -Data_UR[10]); //C轮线速度 m/s
+      ROS_INFO("[11] Current_linear_D: [%.2f m/s]", +Data_UR[11]); //D轮线速度 m/s
 
-    // ROS_INFO("[12] Voltage: [%.2f V]", Data_UR[12]/100); // 电池电压
-    // ROS_INFO("[13] Roll: [%.2f deg]", Data_UR[13]); //绕X轴角度 deg
-    // ROS_INFO("[14] Pitch: [%.2f deg]", Data_UR[14]); //绕Y轴角度 deg													
-                  
-    // ROS_INFO("a: [%d ]",   a);
-    // ROS_INFO("b: [%d ]",   b);                       
-    // ROS_INFO("a/b: [%.2f ]",   (float)a/(float)b);
-    // ROS_INFO("-----------------------"); 
+      ROS_INFO("[12] Voltage: [%.2f V]", Data_UR[12]/100); // 电池电压
+      ROS_INFO("[13] Roll: [%.2f deg]", Data_UR[13]); //绕X轴角度 deg
+      ROS_INFO("[14] Pitch: [%.2f deg]", Data_UR[14]); //绕Y轴角度 deg
+      
+      // ROS_INFO("a: [%d ]",   a);
+      // ROS_INFO("b: [%d ]",   b);
+      // ROS_INFO("a/b: [%.2f ]",   (float)a/(float)b);
+      ROS_INFO("-----------------------");
+    }
+
     if(b>5000)
       b=b/10,a=a/10;
 
