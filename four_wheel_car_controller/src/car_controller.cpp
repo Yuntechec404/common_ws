@@ -53,8 +53,10 @@ bool external_imu = false;
 double Kp = 0.035;// 比例增益
 double Ki = 0.05;  // 積分增益
 double Kd = 0.0; // 微分增益
-double integral = 0.0;       // 誤差積分
+double error = 0.0;          // 當前誤差
 double previous_error = 0.0; // 上一次誤差
+double integral = 0.0;       // 誤差積分
+double derivative = 0.0;     // 誤差微分
 double target_yaw = 0.0;     // 目標航向角 (deg)
 double current_yaw = 0.0;    // 當前航向角 (deg)
 
@@ -146,14 +148,16 @@ void chatterCallback(const geometry_msgs::Twist::ConstPtr& msg) {//获取键盘�
       target_yaw = Yaw;
     else
       target_yaw = current_yaw;
+    error = 0.0;
+    previous_error = 0.0;
     integral = 0.0;
+    derivative = 0.0;
   }
 
   if (x_mid_speed!=0 && z_mid_angle==0) {//按下 I 键 //按下 < 键 
 
     if (dt > 0) {
       // 處理角度循環性 (-180° 到 180°)
-      double error;
       if (!external_imu)
         error = fmod(target_yaw - Yaw + M_PI, 2 * M_PI) - M_PI;
       else
@@ -161,7 +165,7 @@ void chatterCallback(const geometry_msgs::Twist::ConstPtr& msg) {//获取键盘�
       // ROS_INFO("Straight Error:\t%.2f", error);
 
       integral += error * dt;
-      double derivative = (error - previous_error) / dt;
+      derivative = (error - previous_error) / dt;
       double u = Kp * error + Ki * integral + Kd * derivative;
       previous_error = error;
 
@@ -170,9 +174,9 @@ void chatterCallback(const geometry_msgs::Twist::ConstPtr& msg) {//获取键盘�
         u = 0;
       double base_speed = x_mid_speed;
       speed_A = base_speed + u; // 右輪
-      speed_D = base_speed + u; // 右輪
       speed_B = base_speed - u; // 左輪
       speed_C = base_speed - u; // 左輪
+      speed_D = base_speed + u; // 右輪
     }
 
   }//前进 //後退
@@ -230,6 +234,7 @@ int main(int argc, char **argv) {
 
   ros::init(argc, argv, "listener");
   ros::NodeHandle np, private_np("~");//为这个进程的节点创建一个句柄
+  ros::NodeHandle n;
 
   private_np.param<string>("port", port, "/dev/ttyUSB0");
   private_np.param<int>("rate", rate, 200);
@@ -244,12 +249,11 @@ int main(int argc, char **argv) {
   private_np.param<string>("topic_odom", topic_odom, "odom");
   private_np.param<bool>("publish_tf", publish_tf, true);
 
-  ros::Subscriber sub = np.subscribe(topic_cmd_vel, 1000, chatterCallback);//订阅键盘控制
+  ros::Subscriber chatter_sub, imu_sub;
+  chatter_sub = np.subscribe(topic_cmd_vel, 1000, chatterCallback);//订阅键盘控制
   if (external_imu)
-    ros::Subscriber imu_sub = np.subscribe(topic_imu, 10, imuCallback);
+    imu_sub = np.subscribe(topic_imu, 10, imuCallback);
 
-  ros::init(argc, argv, "odometry_publisher");
-  ros::NodeHandle n;
   ros::Publisher odom_pub = n.advertise<nav_msgs::Odometry>(topic_odom, 50);
   ros::Publisher power_voltage_pub = n.advertise<std_msgs::Float64>("car_voltage", 10);
   std_msgs::Float64 voltage;
