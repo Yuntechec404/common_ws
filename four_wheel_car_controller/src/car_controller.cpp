@@ -162,7 +162,7 @@ void chatterCallback(const geometry_msgs::Twist::ConstPtr& msg) {//获取键盘�
         error = fmod(target_yaw - Yaw + M_PI, 2 * M_PI) - M_PI;
       else
         error = fmod(target_yaw - current_yaw + M_PI, 2 * M_PI) - M_PI;
-      // ROS_INFO("Straight Error:\t%.2f", error);
+      ROS_INFO("Straight Error:\t%.2f", error);
 
       integral += error * dt;
       derivative = (error - previous_error) / dt;
@@ -170,9 +170,14 @@ void chatterCallback(const geometry_msgs::Twist::ConstPtr& msg) {//获取键盘�
       previous_error = error;
 
       // 調整輪速 (假設 A、D 為右輪，B、C 為左輪)
+      double base_speed = x_mid_speed;
+      if ((base_speed + u) > 1.1f || (base_speed - u) < -1.1f) {  // 濾掉感測器異常值
+        ROS_ERROR("Error! base_speed = %.2f\tu(t) = %.2f", base_speed, u);
+        u = 0;
+      }
       if (!straight_correction) // 不使用直線校正
         u = 0;
-      double base_speed = x_mid_speed;
+      
       speed_A = base_speed + u; // 右輪
       speed_B = base_speed - u; // 左輪
       speed_C = base_speed - u; // 左輪
@@ -195,23 +200,23 @@ void chatterCallback(const geometry_msgs::Twist::ConstPtr& msg) {//获取键盘�
     //  printf("u"); 
   }//左斜上
   else if (x_mid_speed>0 && z_mid_angle<0) {//按下 O 键
-    speed_A= x_mid_speed*0.9F; 
+    speed_A= x_mid_speed*0.9F;
     speed_B= x_mid_speed*1.1F;
-    speed_C= x_mid_speed*1.0F; 
+    speed_C= x_mid_speed*1.0F;
     speed_D= x_mid_speed*0.7F;
     //  printf("o"); 
   }//右斜上
   else if (x_mid_speed<0 && z_mid_angle<0) {//按下 M 键
-    speed_A= x_mid_speed;
+    speed_A= x_mid_speed*1.1F;
     speed_B= x_mid_speed*0.7F; 
     speed_C= x_mid_speed*0.5F; 
-    speed_D= x_mid_speed*0.95F; 
+    speed_D= x_mid_speed*0.9F; 
     //  printf("m"); 
   }//左斜下
   else if (x_mid_speed<0 && z_mid_angle>0) {//按下 > 键
     speed_A= x_mid_speed*0.7F; 
-    speed_B= x_mid_speed;
-    speed_C= x_mid_speed*0.95F;
+    speed_B= x_mid_speed*1.1F;
+    speed_C= x_mid_speed*0.9F;
     speed_D= x_mid_speed*0.5F;
     //  printf(">"); 
   }//右斜下
