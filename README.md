@@ -1,12 +1,21 @@
 # Common Project Installation
-此專案包含 ZED Driver，請先依照[教學](https://hackmd.io/0GbZVLJGRn6CMj-0_2wntw)安裝 cuda 與 ZED SDK  
-若無需使用到 ZED，請移除 zed-ros-wrapper 專案
+此專案包含以下專案，請先依照教學安裝或移除專案  
+* ZED 驅動，[安裝 cuda 與 ZED SDK](https://hackmd.io/0GbZVLJGRn6CMj-0_2wntw)。  
+* RealSense 驅動，請先安裝 RealSense SDK 或通過以下方式安裝依賴：  
+```
+$ sudo apt-get install ros-$ROS_DISTRO-realsense2-camera
+
+$ sudo apt-get install ros-$ROS_DISTRO-realsense2-description
+```
+* apriltag_ros，[要先裝 apriltag](https://github.com/AprilRobotics/apriltag_ros)  
+
+建立工作區
 ```
 $ mkdir -p ~/common_ws/src 
 
 $ cd ~/common_ws/src
 
-$ git clone https://github.com/hsrong126/common_project.git
+$ git clone https://github.com/Yuntechec404/common_ws.git
 ```
 
 安裝依賴：  
@@ -26,7 +35,7 @@ $ source ~/.bashrc
 ```
 
 # Q&A
-如果導航時出現問題，有可能是以下依賴尚未安裝  
+1. 如果導航時出現問題，有可能是以下依賴尚未安裝  
 * move_base
 * global_planner
 * teb_local_planner
@@ -34,6 +43,11 @@ $ source ~/.bashrc
 * hector_trajectory_server
 ```
 $ sudo apt-get install ros-noetic-move-base ros-noetic-global-planner ros-noetic-teb-local-planner ros-noetic-map-server ros-noetic-hector-trajectory-server
+```
+
+2. four-wheel-differential-drive 專案報錯，尚未安裝 Serial
+```
+$ sudo apt-get install ros-noetic-serial
 ```
 
 # 20250218 以下錯誤未處理
@@ -57,9 +71,15 @@ $ sudo apt-get install build-essential libgtk2.0-dev libavcodec-dev libavformat-
 
 編譯：  
 ```
+$ cd opencv-4.7.0
+
 $ mkdir build
 
 $ cd build
 
 $ cmake -D CMAKE_BUILD_TYPE=Release -D OPENCV_GENERATE_PKGCONFIG=ON -D CMAKE_INSTALL_PREFIX=/usr/local -DBUILD_TIFF=ON ..
+```
+安裝：
+```
+$ sudo make install
 ```
