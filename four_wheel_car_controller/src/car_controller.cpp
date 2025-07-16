@@ -9,6 +9,7 @@
 #include "geometry_msgs/Twist.h"
 #include <sensor_msgs/Imu.h>
 #include <nav_msgs/Odometry.h>
+#include <angles/angles.h>
 #include <tf/tf.h>
 #include <tf/transform_broadcaster.h>
 #include <string>
@@ -35,10 +36,14 @@ uint16_t a,b;
 void send_data(void);//串口发送协议函数
 uint8_t Flag_OK=0;
 
-double Yaw = 0.0;
-double Yaw_zero = 0.0;
-double Yaw_error = 0.0;
-double Yaw_last = 0.0;
+// Global variables
+double Yaw = 0.0;          // 內部IMU (rad)
+double current_yaw = 0.0;  // 外部IMU (rad)
+double target_yaw = 0.0;   // (rad)
+double error = 0.0;
+
+bool yaw_zero_set = false;
+double yaw_zero = 0.0;
 
 bool new_message_received = false;
 string port = "/dev/ttyUSB0";
@@ -56,12 +61,9 @@ bool external_imu = false;
 double Kp = 0.035;// 比例增益
 double Ki = 0.05;  // 積分增益
 double Kd = 0.0; // 微分增益
-double error = 0.0;          // 當前誤差
 double previous_error = 0.0; // 上一次誤差
 double integral = 0.0;       // 誤差積分
 double derivative = 0.0;     // 誤差微分
-double target_yaw = 0.0;     // 目標航向角 (deg)
-double current_yaw = 0.0;    // 當前航向角 (deg)
 
 ros::Time current_time, last_time;
 double dt;
@@ -132,7 +134,7 @@ void imuCallback(const sensor_msgs::Imu::ConstPtr& msg) {
   tf::Matrix3x3 m(q);
   double roll, pitch, yaw;
   m.getRPY(roll, pitch, yaw); // 轉換為歐拉角 (rad)
-  current_yaw = yaw * 180.0 / M_PI; // 轉換為度 (deg)
+  current_yaw = yaw; // 弧度
 }
 
 void chatterCallback(const geometry_msgs::Twist::ConstPtr& msg) {//获取键盘控制的回调函数
@@ -189,9 +191,9 @@ void chatterCallback(const geometry_msgs::Twist::ConstPtr& msg) {//获取键盘�
 
         // 處理角度循環性 (-180° 到 180°)
         if (!external_imu)
-            error = fmod(target_yaw - Yaw + M_PI, 2 * M_PI) - M_PI;
+            error = angles::normalize_angle(target_yaw - Yaw);
         else
-            error = fmod(target_yaw - current_yaw + M_PI, 2 * M_PI) - M_PI;
+            error = angles::normalize_angle(target_yaw - current_yaw);
         ROS_INFO("Straight Error:\t%.2f", error);
 
         integral += error * dt;
@@ -200,10 +202,7 @@ void chatterCallback(const geometry_msgs::Twist::ConstPtr& msg) {//获取键盘�
         previous_error = error;
 
         // 限制 u(t)
-        if (u > max_speed || u < -max_speed) {
-            ROS_ERROR("Error! u(t) = %.2f", u);
-            u = 0;
-        }
+        u = std::max(std::min(u, max_speed), -max_speed);
 
         // 調整輪速（A、D 為右輪，B、C 為左輪）
         speed_A += u;
@@ -346,6 +345,8 @@ int main(int argc, char **argv) {
     ros::Rate loop_rate(rate);//设置循环间隔，即代码执行频率 200 HZ
 
     while (ros::ok()) {
+        ros::spinOnce();
+
         new_message_received = false;
         if (Flag_OK==1) {
             //角速度转换成 rad/s
@@ -369,31 +370,34 @@ int main(int argc, char **argv) {
             float Power_D_X = +Data_UR.speed_d;
             float Power_D_Y = 0;
 
-            Yaw = Data_UR.yaw;
-                
             vx  = (Power_A_X + Power_B_X + Power_C_X + Power_D_X)/4 ;//底盘当前X方向线速度 m/s	
             vy  = (Power_A_Y + Power_B_Y + Power_C_Y + Power_D_Y)/4 ;//底盘当前Y方向线速度 m/s	
             vth = angular_velocity_z;//设备当前Z轴角速度 rad/s
 
-            current_time = ros::Time::now();//记录当前时间
-                
             //以给定机器人速度的典型方式计算里程计
+            current_time = ros::Time::now();//记录当前时间
             dt = (current_time - last_time).toSec();
-            
-            double delta_x = (vx * cos(Yaw_error*to_rad) - vy * sin(Yaw_error*to_rad)) * dt;
-            double delta_y = (vx * sin(Yaw_error*to_rad) + vy * cos(Yaw_error*to_rad)) * dt;
-            //   double delta_th = vth * dt;
 
+            if (!external_imu) {
+                if (!yaw_zero_set) { // 設定偏航角零點
+                    yaw_zero = Yaw;
+                    yaw_zero_set = true;
+                }
+                Yaw = Data_UR.yaw;
+                th = angles::normalize_angle(Yaw - yaw_zero);
+            } else {
+                if (!yaw_zero_set) { // 設定偏航角零點
+                    yaw_zero = current_yaw;
+                    yaw_zero_set = true;
+                }
+                th = angles::normalize_angle(current_yaw - yaw_zero);
+            }
 
-            static uint8_t only = 0;
-            if(only == 0) Yaw_zero = Yaw, only = 1; //每次运行记录一次初始角度作为零点
-
-            Yaw_error = Yaw - Yaw_zero; //当前角度值减去初始角度值
+            // delta_x, delta_y 使用 th
+            double delta_x = (vx * cos(th) - vy * sin(th)) * dt;
+            double delta_y = (vx * sin(th) + vy * cos(th)) * dt;
             x += delta_x;//X轴速度累积位移 m
             y += delta_y;//Y轴速度累积位移 m
-            // th += delta_th;//Z轴角速度累积求车体朝向角度  rad //存在漂移
-            th = Yaw_error*to_rad;
-
 
             //因为所有的里程表都是6自由度的，所以我们需要一个由偏航创建的四元数
             geometry_msgs::Quaternion odom_quat = tf::createQuaternionMsgFromYaw(th);
@@ -452,10 +456,6 @@ int main(int argc, char **argv) {
 
             last_time = current_time;//保存为上次时间
         }
-
-
-
-        ros::spinOnce();//执行回调处理函数，完后继续往下执行
 				
 
     // if (new_message_received) ROS_INFO("New /cmd_vel message received!");
@@ -476,7 +476,7 @@ int main(int argc, char **argv) {
             }
 
             send_data(); //发送指令控制电机运行
-        } else if (!new_message_received) {  //當沒有收到/cmd_vel新的訊息以後，就停止運動
+        } else {  //當沒有收到/cmd_vel新的訊息以後，就停止運動
             count_2++;
             if (count_2 > 50) {
                 Data_US.flag_start = Flag_start ? 1.0f : 0.0f;
@@ -580,14 +580,14 @@ int main(int argc, char **argv) {
             ROS_INFO("-----------------------");
         }
 
-        if(b>5000)
-            b=b/10,a=a/10;
+        if(b > 5000)
+            b = b/10, a = a/10;
 
         
         voltage.data = (double) round(Data_UR.voltage) / 100;
         power_voltage_pub.publish(voltage);
         
-        loop_rate.sleep();//循环延时时间
+        loop_rate.sleep();
     }
   
 
