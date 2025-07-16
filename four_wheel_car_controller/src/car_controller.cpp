@@ -380,11 +380,11 @@ int main(int argc, char **argv) {
             dt = (current_time - last_time).toSec();
 
             if (!external_imu) {
+                Yaw = Data_UR.yaw * to_rad;
                 if (!yaw_zero_set) { // 設定偏航角零點
                     yaw_zero = Yaw;
                     yaw_zero_set = true;
                 }
-                Yaw = Data_UR.yaw;
                 th = angles::normalize_angle(Yaw - yaw_zero);
             } else {
                 if (!yaw_zero_set) { // 設定偏航角零點
