@@ -194,7 +194,7 @@ void chatterCallback(const geometry_msgs::Twist::ConstPtr& msg) {//获取键盘�
             error = angles::normalize_angle(target_yaw - Yaw);
         else
             error = angles::normalize_angle(target_yaw - current_yaw);
-        ROS_INFO("Straight Error:\t%.2f", error);
+        ROS_DEBUG("Straight Error:\t%.2f", error);
 
         integral += error * dt;
         derivative = (error - previous_error) / dt;
@@ -202,7 +202,10 @@ void chatterCallback(const geometry_msgs::Twist::ConstPtr& msg) {//获取键盘�
         previous_error = error;
 
         // 限制 u(t)
-        u = std::max(std::min(u, max_speed), -max_speed);
+        if (u > max_speed || u < -max_speed) {
+            ROS_ERROR("u(t) = %.2f overshoot", u);
+            u = 0;
+        }
 
         // 調整輪速（A、D 為右輪，B、C 為左輪）
         speed_A += u;
@@ -345,8 +348,6 @@ int main(int argc, char **argv) {
     ros::Rate loop_rate(rate);//设置循环间隔，即代码执行频率 200 HZ
 
     while (ros::ok()) {
-        ros::spinOnce();
-
         new_message_received = false;
         if (Flag_OK==1) {
             //角速度转换成 rad/s
@@ -456,7 +457,8 @@ int main(int argc, char **argv) {
 
             last_time = current_time;//保存为上次时间
         }
-				
+		
+        ros::spinOnce();
 
     // if (new_message_received) ROS_INFO("New /cmd_vel message received!");
     // else if (!new_message_received) ROS_WARN("No new /cmd_vel messages received.");
