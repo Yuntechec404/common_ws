@@ -7,6 +7,7 @@ from geometry_msgs.msg import Twist
 from enum import Enum
 import statistics
 import time
+from cut_pliers_controller.msg import CmdCutPliers
 
 class Action():
     def __init__(self, Subscriber):
@@ -32,6 +33,7 @@ class Action():
         self.is_marker_pose_received = False
         self.marker_2d_pose_x = 0.0
         self.marker_2d_pose_y = 0.0
+        self.marker_2d_pose_z = 0.0
         self.marker_2d_theta = 0.0
         self.initial_marker_pose_x = 0.0
         self.initial_marker_pose_y = 0.0
@@ -43,11 +45,21 @@ class Action():
         # other
         self.check_wait_time = 0
         self.is_triggered = False
+        # arm
+        self.current_arm_status = self.Subscriber.current_arm_status
+        # 初始化 y_pose_history 和窗口大小
+        # self.y_pose_history = []
+        # self.moving_average_window = 5
+        # self.arm_control_pub = rospy.Publisher("/cmd_cut_pliers", CmdCutPliers, queue_size=10)
+        # 用於儲存最新的手臂狀態
+        
+        # 訂閱 /arm_current_status 話題
+        # self.arm_status_sub = rospy.Subscriber("/arm_current_status", CmdCutPliers, self.arm_status_callback, queue_size=1)
 
 
     def SpinOnce(self):
         (self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta, \
-         self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta)=self.Subscriber.SpinOnce()
+         self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_pose_z, self.marker_2d_theta)=self.Subscriber.SpinOnce()
         
     def fnRotateToRelativeLine(self, distance, Kp, v):
         time_needed = abs(distance / (Kp * v))   # 計算所需的行駛時間
@@ -286,6 +298,181 @@ class Action():
                
         return statistics.median(clean_list) 
 
+    def ClawAlignZX(self, z_tolerance=3, x_tolerance=3):
+        # 讀取當前 marker 與 arm 狀態
+        self.SpinOnce()
+        if not self.TFConfidence():
+            rospy.logwarn("TF confidence is low, cannot align claw.")
+            return False
+        target_z = self.marker_2d_pose_z
+        target_x = self.marker_2d_pose_x
+        if self.current_arm_status is None:
+            rospy.logwarn("尚未接收到手臂狀態，等待中...")
+            return False
+        if self.Subscriber.arm_ID ==1:
+            current_z = self.current_arm_status.height1
+            current_x = self.current_arm_status.length1
+        elif self.Subscriber.arm_ID ==2:
+            current_z = self.current_arm_status.height2
+            current_x = self.current_arm_status.length2
+
+        dz = target_z - current_z
+        dx = target_x - current_x
+
+        in_z = abs(dz) <= z_tolerance
+        in_x = abs(dx) <= x_tolerance
+
+        if in_z and in_x:
+            self.cmd_vel.fnStop()
+            self.cmd_vel.fnClawStop()
+            return True
+
+        # 速度隨距離調整
+        z_speed = self.cmd_vel._clawZ_speed(0.2 * abs(dz))
+        x_speed = self.cmd_vel._clawX_speed(0.2 * abs(dx))
+
+        # 發送命令
+        if not in_z:
+            self.cmd_vel.fnClawUpDown(int(target_z), z_speed)
+        if not in_x:
+            self.cmd_vel.fnClawForward(int(target_x), x_speed)
+        return False
+    
+    def DeadMoveZ(self, target_z, speed_k=0.5, z_tolerance=3): # 盲走Z
+        if self.current_arm_status is None:
+            rospy.logwarn("尚未接收到手臂狀態，等待中...")
+            return False
+
+        if self.Subscriber.arm_ID == 1:
+            current_z = self.current_arm_status.height1
+        elif self.Subscriber.arm_ID == 2:
+            current_z = self.current_arm_status.height2
+        
+        dz = min(target_z + current_z, self.Subscriber.cut_pliers_max_height)
+        if abs(dz) <= z_tolerance:
+            self.cmd_vel.fnClawStop()
+            return True
+
+        if dz > 0:
+            z_speed = self.cmd_vel._clawZ_speed(abs(dz) * speed_k + 1)
+            self.cmd_vel.fnClawUpDown(int(target_z), z_speed)
+            # rospy.loginfo(f"Z 上升: {current_z:.1f}→{target_z:.1f} (dz={dz:.1f}, speed={z_speed})")
+        else:
+            z_speed = self.cmd_vel._clawZ_speed(abs(dz) * speed_k + 1)
+            self.cmd_vel.fnClawUpDown(int(target_z), z_speed)
+            # rospy.loginfo(f"Z 下降: {current_z:.1f}→{target_z:.1f} (dz={dz:.1f}, speed={z_speed})")
+        return False
+
+    def DeadMoveX(self, target_x, speed_k=0.5, x_tolerance=3):  # 盲走X
+        if self.current_arm_status is None:
+            rospy.logwarn("尚未接收到手臂狀態，等待中...")
+            return False
+
+        if self.Subscriber.arm_ID == 1:
+            current_x = self.current_arm_status.length1
+        elif self.Subscriber.arm_ID == 2:
+            current_x = self.current_arm_status.length2
+
+        dx = min(target_x + current_x, self.Subscriber.cut_pliers_max_length)
+        if abs(dx) <= x_tolerance:
+            self.cmd_vel.fnClawStop()
+            return True
+
+        if dx > 0:
+            x_speed = self.cmd_vel._clawX_speed(abs(dx) * speed_k + 1)
+            self.cmd_vel.fnClawForward(int(target_x), x_speed)
+            # rospy.loginfo(f"X 前伸: {current_x:.1f}→{target_x:.1f} (dx={dx:.1f}, speed={x_speed})")
+        else:
+            x_speed = self.cmd_vel._clawX_speed(abs(dx) * speed_k + 1)
+            self.cmd_vel.fnClawBackward(int(target_x), x_speed)
+            # rospy.loginfo(f"X 縮回: {current_x:.1f}→{target_x:.1f} (dx={dx:.1f}, speed={x_speed})")
+        return False
+
+    def fnRetractArm(self, timeout=12.0):
+            """
+            後退手臂到指定的目標長度。
+            參數從 self.Subscriber 讀取。
+            """
+            if hasattr(self, "retract_executed") and self.retract_executed:
+                rospy.logwarn("已執行過後退，忽略此次請求")
+                return False
+
+            target_length = self.Subscriber.cut_pliers_retract_length
+            rospy.loginfo(f"正在執行 fnRetractArm(), 目標長度: {target_length}")
+
+            start_time = time.time()
+            if self.Subscriber.arm_ID == 1:
+                current_length = self.current_arm_status.length1
+            elif self.Subscriber.arm_ID == 2:
+                current_length = self.current_arm_status.length2
+
+            if current_length is None:
+                rospy.logerr("無法獲取當前手臂長度，後退失敗")
+                return False
+
+            if target_length > current_length:
+                rospy.logwarn(f"目標長度 {target_length} mm 大於當前長度 {current_length} mm，忽略請求")
+                return False
+
+            # 設置為已執行後退
+            self.retract_executed = True
+
+            # 發送後退訊息
+            
+            self.arm_control_pub.publish(msg)
+            rospy.loginfo(f"🔵 已發送後退指令: {msg}")
+
+            while time.time() - start_time < timeout:
+                self.SpinOnce()
+                current_length = self.current_arm_status.length1
+
+                if abs(current_length - target_length_1) <= 10:
+                    rospy.loginfo(f"✅ 手臂已成功縮回至 {current_length} mm")
+                    return True
+
+                rospy.logwarn(f"⏳ 目前長度 {current_length} mm，目標 {target_length_1} mm，等待中...")
+                rospy.sleep(0.5)
+
+            rospy.logerr(f"⏰ 手臂後退超時: 目標 {target_length_1} mm 未達成，當前 {current_length} mm")
+            return False
+
+    def fnControlClaw(self, claw_state, timeout=3):
+        start_time = time.time()
+
+        # 確保 claw_state 為 bool
+        claw_state = bool(claw_state)
+
+        # 等待初始手臂狀態
+        while self.current_arm_status is None and time.time() - start_time < 1.0:
+            rospy.logwarn("等待手臂狀態初始化...")
+            rospy.sleep(0.1)
+        if self.current_arm_status is None:
+            rospy.logerr("❌ 未接收到手臂狀態，無法控制剪鉗")
+            return False
+
+        # 發送剪鉗控制指令
+        if self.Subscriber.arm_ID == 1:
+            claw_state = self.current_arm_status.claw1 if claw_state else not self.current_arm_status.claw1
+        elif self.Subscriber.arm_ID == 2:
+            claw_state = self.current_arm_status.claw2 if claw_state else not self.current_arm_status.claw2
+
+        # 等待剪鉗狀態變更
+        while time.time() - start_time < timeout:
+            self.SpinOnce()  # 處理 ROS 回傳的狀態
+            if self.current_arm_status.claw1 == claw_state:
+                if claw_state:  # 閉合
+                    rospy.loginfo(f"✅ 剪鉗閉合成功，等待2秒以穩定狀態...")
+                    rospy.sleep(5)  # 閉合後等待2秒
+                else:  # 打開
+                    rospy.loginfo(f"✅ 剪鉗打開成功，等待10秒以穩定狀態...")
+                    rospy.sleep(25)  # 打開後等待10秒
+                return True
+            rospy.logwarn(f"⏳ 剪鉗動作中... 目標: {claw_state}, 當前: {self.current_arm_status.claw1}")
+            rospy.sleep(0.1)
+        
+        rospy.logerr(f"⏰ 剪鉗動作超時: 目標 {claw_state}, 當前: {self.current_arm_status.claw1}")
+        return False
+    
     def TFConfidence(self):#判斷TF是否可信
         # rospy.loginfo('shelf_detection: {0}'.format(self.Subscriber.sub_detectionConfidence.shelf_detection))
         # rospy.loginfo('shelf_confidence: {0}'.format(self.Subscriber.sub_detectionConfidence.shelf_confidence))
@@ -299,6 +486,7 @@ class cmd_vel():
     def __init__(self, Subscriber):
         self.Subscriber = Subscriber
         self.pub_cmd_vel = self.Subscriber.pub_cmd_vel
+        self.arm_pub_cmd_vel = self.Subscriber.arm_control_topic
         self.front = False
 
     def cmd_pub(self, twist):
@@ -309,19 +497,19 @@ class cmd_vel():
             twist.angular.z =0.2
         elif twist.angular.z < -0.2:
             twist.angular.z =-0.2
-        if twist.linear.x > 0 and twist.linear.x < 0.01:
+        if twist.linear.x > 0 and twist.linear.x < 0.03:
             twist.linear.x =0.02
-        elif twist.linear.x < 0 and twist.linear.x > -0.01:
+        elif twist.linear.x < 0 and twist.linear.x > -0.03:
             twist.linear.x =-0.02   
 
         if twist.linear.x > 0.2:
             twist.linear.x =0.2
         elif twist.linear.x < -0.2:
             twist.linear.x =-0.2                     
-        if twist.angular.z > 0 and twist.angular.z < 0.06:  #pin 0.05 -> 0.06
-            twist.angular.z =0.06
-        elif twist.angular.z < 0 and twist.angular.z > -0.06:
-            twist.angular.z =-0.06
+        if twist.angular.z > 0 and twist.angular.z < 0.09:  #pin 0.05 -> 0.06
+            twist.angular.z =0.1
+        elif twist.angular.z < 0 and twist.angular.z > -0.09:
+            twist.angular.z =-0.1
         self.pub_cmd_vel.publish(twist)
 
     def fnStop(self):
@@ -363,5 +551,88 @@ class cmd_vel():
 
         twist.angular.z = kp * theta
         self.cmd_pub(twist)
+    
+    def _clawZ_speed(self, speed):
+        SPEED_MIN = 1
+        SPEED_MAX = 10
+        return max(SPEED_MIN, min(SPEED_MAX, int(speed)))
+    
+    def _clawX_speed(self, speed):
+        SPEED_MIN = 1
+        SPEED_MAX = 10
+        return max(SPEED_MIN, min(SPEED_MAX, int(speed)))
 
-  
+    def arm_cmd_pub(self, msg):
+        if self.Subscriber.arm_ID == 1:
+            msg.enable_motor1 = True
+            msg.enable_motor2 = True
+            msg.enable_motor3 = False
+            msg.enable_motor4 = False
+        elif self.Subscriber.arm_ID == 2:
+            msg.enable_motor1 = False
+            msg.enable_motor2 = False
+            msg.enable_motor3 = True
+            msg.enable_motor4 = True\
+            
+        self.arm_pub_cmd_vel.publish(msg)
+
+    def fnClawClose(self): # 關閉剪鉗
+        msg = CmdCutPliers()
+        if self.Subscriber.arm_ID == 1:
+            msg.claw1 = True
+            msg.claw2 = False
+        elif self.Subscriber.arm_ID == 2:
+            msg.claw1 = False
+            msg.claw2 = True
+        self.arm_cmd_pub(msg)
+    
+    def fnClawOpen(self): # 打開剪鉗
+        msg = CmdCutPliers()
+        if self.Subscriber.arm_ID == 1:
+            msg.claw1 = False
+            msg.claw2 = True
+        elif self.Subscriber.arm_ID == 2:
+            msg.claw1 = True
+            msg.claw2 = False
+
+    def fnClawUpDown(self, target=10, speed=1): # 上升，target為增加的高度，速度自選
+        msg = CmdCutPliers()
+        if self.Subscriber.arm_ID == 1:
+            msg.speed1 = self._clawZ_speed(speed)
+            msg.height1 = target
+        elif self.Subscriber.arm_ID == 2:
+            msg.speed3 = self._clawZ_speed(speed)
+            msg.height2 = target
+        self.arm_cmd_pub(msg)
+
+    def fnClawForward(self, target=10, speed=1): # 前伸，target為增加的長度（正數），速度自選
+        msg = CmdCutPliers()
+        msg.mode = 0
+        if self.Subscriber.arm_ID == 1:
+            msg.speed2 = self._clawX_speed(speed)
+            msg.length1 = abs(target)
+        elif self.Subscriber.arm_ID == 2:
+            msg.speed4 = self._clawX_speed(speed)
+            msg.length2 = abs(target)
+        self.arm_cmd_pub(msg)
+
+    def fnClawBackward(self, target=10, speed=1): # 後退，target為減少的長度（正數），速度自選
+        msg = CmdCutPliers()
+        msg.mode = 1
+        if self.Subscriber.arm_ID == 1:
+            msg.speed2 = self._clawX_speed(speed)
+            msg.length1 = abs(target)
+        elif self.Subscriber.arm_ID == 2:
+            msg.speed4 = self._clawX_speed(speed)
+            msg.length2 = abs(target)
+        self.arm_cmd_pub(msg)
+
+    def fnClawStop(self):
+        msg = CmdCutPliers()
+        if self.Subscriber.arm_ID == 1:
+            msg.speed1 = 0
+            msg.speed2 = 0
+        elif self.Subscriber.arm_ID == 2:
+            msg.speed3 = 0
+            msg.speed4 = 0
+        self.arm_cmd_pub(msg)

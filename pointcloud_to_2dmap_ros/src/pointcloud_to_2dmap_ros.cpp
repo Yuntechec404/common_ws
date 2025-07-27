@@ -102,7 +102,7 @@ int main(int argc, char **argv)
     cv::imwrite(map_path, map);
     ROS_INFO_STREAM("Saved 2D map as PNG: " << map_path);
 
-    std::string yaml_path = dest_directory + "/map.yaml";
+    std::string yaml_path = dest_directory + "/" + map_name + ".yaml";
     std::ofstream ofs(yaml_path);
     ofs << "image: " << map_name << ".png" << std::endl;
     ofs << "resolution: " << map_generator.resolution << std::endl;

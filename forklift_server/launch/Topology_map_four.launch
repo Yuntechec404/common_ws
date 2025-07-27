@@ -1,0 +1,39 @@
+<launch>
+<arg name="robot_pose" default="/robot_pose"/>
+<node pkg="forklift_server" type="publisher_robot_pose.py" name="Robot_pose" output="screen">
+    <param name="publish_name" value="$(arg robot_pose)" />
+    <param name="rate" type="int" value="10" />
+</node>
+<node pkg="forklift_server" type="Topology_map_server.py" name="TopologyMap_server" output="screen">
+    <param name="robot_pose" value="$(arg robot_pose)" /><!--里程計 Topic（map -> base_link, 是tf相對關係, 非輪式里程計）/-->
+    <param name="start_node" value="P1" />
+    <rosparam param= "graph">
+    {
+        "P1": {"P2": 1},
+        "P2": {"P3": 1},
+        "P3": {"P4": 1},
+        "P4": {"P5": 1},
+        "P5": {"P5": 1}
+    }
+    </rosparam>
+    <rosparam param= "waypoints">
+    {    
+        <!-- "P1": [2.243, 7.834, 0.596, 0.803],
+        "P2": [3.468, 11.779, 0.596, 0.803],
+        "P3": [4.649, 15.740, 0.596, 0.803] -->
+
+        <!-- "P1": [-2.436, -0.830,-0.030, 0.999],
+        "P2": [-0.536, -0.603,-0.033, 0.999],
+        "P3": [-0.536, -0.603,-0.693, 0.720],
+        "P4": [0.254, -3.321,-0.724, 0.689],
+        "P5": [1.125, -8.322,-0.679, 0.733] -->
+
+        "P1": [-2.473, -1.570,0.061, 0.998],
+        "P2": [-0.083, -1.265,0.062, 0.998],
+        "P3": [-0.083, -1.265,-0.640, 0.768],
+        "P4": [0.235, -4.366,-0.653, 0.757],
+        "P5": [1.125, -8.322,-0.679, 0.733]
+    }
+    </rosparam>
+</node>
+</launch>

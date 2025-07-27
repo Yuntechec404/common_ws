@@ -7,9 +7,9 @@
     <param name="max_points_in_pix" value="2" type="int" />
     <param name="min_height" value="0.5" type="double" />
     <param name="max_height" value="3.0" type="double" />
-    <param name="dest_directory" value="/home/user/Maps/20230731/"/>
-    <param name="input_pcd" value="/home/user/Maps/20230731/Map0731.pcd"/>    
-    <param name="map_name" value="Map"/>
+    <param name="dest_directory" value="/home/user/catkin_ws/src/hdl_slam_navigation/hdl_graph_slam/mapfile/"/>
+    <param name="input_pcd" value="/home/user/catkin_ws/src/hdl_slam_navigation/hdl_graph_slam/mapfile/four_gallery.pcd"/>    
+    <param name="map_name" value="four_gallery"/>
   </node>
 </launch>
 

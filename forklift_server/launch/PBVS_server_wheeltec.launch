@@ -1,21 +1,37 @@
 <launch>
     <arg name="forkpos" default="/forklift_pose"/>
-    <!-- <node pkg="tf" type="static_transform_publisher" name="link1_broadcaster" args="-0.16 0 0.58 3.14 0.43633231 0 base_link camera_link 100" /> -->
+    <node pkg="tf" type="static_transform_publisher" name="link1_broadcaster" args="0.0 0.22 0.43 1.57 0.0 0 base_link camera_link 100" />
 
     <!--megapose-->
-    <include file="$(find visp_megapose)/launch/megapose_client_oilpalm.launch"/>
+    <!-- <include file="$(find visp_megapose)/launch/megapose_client_oilpalm.launch"/> -->
+    <include file="$(find visp_megapose)/launch/megapose_client_apple.launch"/>
 
     <node pkg="forklift_server" type="PBVS_server_differential.py" name="PBVS_server" output="screen">
         <!--Subscriber Topic setting/-->
+        <param name="arm_ID" value="1" /><!--剪鉗1 or 2/-->
         <param name="odom" value="/wheel_odom" /><!--里程計 Topic（map -> base_link, 是tf相對關係, 非輪式里程計）/-->
-        <param name="pose_topic" value="/oilpalm" /><!--相機對位的 Topic/-->
+        <param name="pose_topic" value="/red_apple" /><!--相機對位的 Topic/-->
         <param name="object_filter" value="False" /><!--(True: , False: )/-->
         <param name="confidence_minimum" value="0.7" /><!--megapose信心值低於它停止動作/-->
+        <param name="arm_status_topic" value="/arm_current_status" /><!--剪鉗狀態 Topic/-->
+        <param name="arm_control_topic" value="/cmd_cut_pliers" /><!--剪鉗動作 Topic/-->
 
         <!--camera parking setting-->
         <param name="camera_tag_offset_x" type="double" value = "0.0" /><!--對位目標點與tag的左右偏移量/-->
-        <param name="camera_desired_dist_threshold" type="double" value = "0.35" />  <!--距離目標點的直線距離小於threshold，就不執行move_nearby_parking_lot動作-->
-        <param name="camera_horizon_alignment_threshold" type="double" value = "0.03" />  <!--車體相機水平對齊偏差容許距離（公尺）/-->
-
+        <param name="camera_desired_dist_threshold" type="double" value = "0.5" />  <!--距離目標點的直線距離小於threshold，就不執行move_nearby_parking_lot動作-->
+        <param name="camera_horizon_alignment_threshold" type="double" value = "0.01" />  <!--車體相機水平對齊偏差容許距離（公尺）/-->
+    
+        <!--Cut pliers (arm) control settings/-->
+        <param name="cut_pliers_lower_z" type="double" value="0.022" /><!--水果 Z 軸下界（用於 fnControlArmBasedOnFruitZ）/-->
+        <param name="cut_pliers_upper_z" type="double" value="0.028" /><!--水果 Z 軸上界（用於 fnControlArmBasedOnFruitZ）/-->
+        <param name="cut_pliers_height_increment" type="double" value="10.0" /><!--手臂高度調整增量（用於 fnControlArmBasedOnFruitZ）/-->
+        <param name="cut_pliers_min_height" type="double" value="0.0" /><!--手臂最小高度（用於 fnControlArmBasedOnFruitZ）/-->
+        <param name="cut_pliers_max_height" type="double" value="280.0" /><!--手臂最大高度（用於 fnControlArmBasedOnFruitZ）/-->
+        <param name="cut_pliers_target_x" type="double" value="-0.13" /><!--水果 X 軸目標值（用於 fnControlArmBasedOnFruitX）/-->
+        <param name="cut_pliers_length_increment" type="double" value="10.0" /><!--手臂長度調整增量（用於 fnControlArmBasedOnFruitX）/-->
+        <param name="cut_pliers_max_length" type="double" value="440.0" /><!--手臂最大長度（用於 fnControlArmBasedOnFruitX 和 fnBlindExtendArm）/-->
+        <param name="cut_pliers_blind_extend_length" type="double" value="78.0" /><!--盲伸的額外長度（用於 fnBlindExtendArm）/-->
+        <param name="cut_pliers_retract_length" type="double" value="10.0" /><!--後退的目標長度（用於 fnRetractArm）/-->
+        
     </node>
 </launch>

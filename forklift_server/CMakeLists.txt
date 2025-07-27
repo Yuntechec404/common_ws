@@ -8,7 +8,7 @@ actionlib
 actionlib_msgs 
 geometry_msgs 
 tf 
-forklift_msg 
+forklift_msg  
 message_generation
 )
 find_package(Boost REQUIRED COMPONENTS system)

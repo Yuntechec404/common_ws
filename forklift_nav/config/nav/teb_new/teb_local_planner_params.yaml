@@ -1,0 +1,80 @@
+TebLocalPlannerROS:
+  odom_topic: odom
+  map_frame: map
+
+  publish_feedback: true
+
+  # Trajectory
+  teb_autosize: true
+  dt_ref: 0.5
+  dt_hysteresis: 0.3
+  allow_init_with_backwards_motion: true
+  global_plan_overwrite_orientation: false
+  max_global_plan_lookahead_dist: 10.0  # 從 10.0 改為 2.0
+  feasibility_check_no_poses: 3
+
+  # Robot
+  cmd_angle_instead_rotvel: false
+  max_vel_x: 0.3 # 1.0
+  max_vel_x_backwards: 0.1
+  max_vel_y: 0.0
+  max_vel_theta: 0.4
+  acc_lim_x: 0.5
+  acc_lim_y: 0.0
+  acc_lim_theta: 0.33
+  min_turning_radius: 0.0
+  wheelbase: 0.25
+  footprint_model:
+    type: polygon
+    vertices: [[0.31, 0.25],[0.31, -0.25],[-0.31, -0.25],[-0.31, 0.25],[0.31, 0.25]]
+
+  # GoalTolerance
+  xy_goal_tolerance: 0.15
+  yaw_goal_tolerance: 0.23
+  free_goal_vel: false
+
+  # Obstacles
+  min_obstacle_dist: 0.5  # 從 0.7 降到 0.5
+  inflation_dist: 0.3 # 從 0.6 降到 0.0
+  dynamic_obstacle_inflation_dist: 0.05
+  include_costmap_obstacles: true
+  costmap_obstacles_behind_robot_dist: 1.0
+  obstacle_poses_affected: 25 #7
+  costmap_converter_plugin: "costmap_converter::CostmapToLinesDBSRANSAC"
+  costmap_converter_spin_thread: true
+  costmap_converter_rate: 10
+  legacy_obstacle_association: false
+
+  # Optimization
+  no_inner_iterations: 5
+  no_outer_iterations: 4
+  optimization_activate: true
+  optimization_verbose: false
+  penalty_epsilon: 0.1
+  obstacle_cost_exponent: 1.0
+  weight_max_vel_x: 1
+  weight_max_vel_theta: 1
+  weight_acc_lim_x: 1
+  weight_acc_lim_theta: 0.1
+  weight_kinematics_nh: 1000.0
+  weight_kinematics_forward_drive: 1
+  weight_kinematics_turning_radius: 1
+  weight_optimaltime: 0.5
+  weight_obstacle: 100.0
+  weight_inflation: 50.0
+  selection_alternative_time_cost: false
+  weight_viapoint: 0.8 # 從 1.0 降到 5.0  # 權重越大，TEB 越嚴格地貼著全域路徑行駛
+  global_plan_viapoint_sep: 0.3 # 從 0.8 降到 0.3
+
+  # Homotopy Class Planner
+  enable_homotopy_class_planning: true
+  enable_multithreading: false
+  simple_exploration: false
+  max_number_classes: 4
+  roadmap_graph_no_samples: 15
+  roadmap_graph_area_width: 5
+  h_signature_prescaler: 0.5
+  h_signature_threshold: 0.1
+  obstacle_keypoint_offset: 0.1
+  obstacle_heading_threshold: 0.45
+  visualize_hc_graph: false

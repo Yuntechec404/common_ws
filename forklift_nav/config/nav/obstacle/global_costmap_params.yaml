@@ -1,0 +1,21 @@
+global_costmap:
+  global_frame: map
+  robot_base_frame: base_link
+  update_frequency: 0.5  # 從 1.0 降到 0.5
+  publish_frequency: 0.5
+  static_map: true
+  rolling_window: false
+  width: 200.0
+  height: 200.0
+  resolution: 0.1  # 從 0.05 改為 0.1
+  transform_tolerance: 1.0
+  map_type: costmap
+
+GlobalPlanner:
+  allow_unknown: true  # 從 false 改為 true
+  default_tolerance: 0.5
+
+plugins:
+  - {name: static_layer, type: "costmap_2d::StaticLayer"}
+  - {name: obstacle_layer, type: "costmap_2d::ObstacleLayer"}  # 啟用
+  - {name: inflation_layer, type: "costmap_2d::InflationLayer"}  # 啟用

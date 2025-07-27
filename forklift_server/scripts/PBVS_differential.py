@@ -9,6 +9,13 @@ ParkingCameraSequence = Enum( 'ParkingCameraSequence', \
                     move_nearby_parking_lot \
                     parking \
                     decide \
+                    cut_pliers_align_ZX \
+                    cut_pliers_dead_reckoning_up \
+                    cut_pliers_dead_reckoning_down \
+                    cut_pliers_dead_reckoning_extend \
+                    cut_pliers_dead_reckoning_retract \
+                    close_pliers \
+                    open_pliers \
                     stop \
                     error')
 FrontSequence = Enum( 'FrontSequence', \
@@ -65,19 +72,41 @@ class PBVS():
                 self.is_sequence_finished = self.Action.fnSeqdecide(self.subscriber.camera_desired_dist_threshold, self.subscriber.camera_horizon_alignment_threshold )
                 
                 if self.is_sequence_finished == True:
-                    current_sequence = ParkingCameraSequence.stop.value
+                    current_sequence = ParkingCameraSequence.cut_pliers_align_ZX.value
                     self.is_sequence_finished = False
                 elif self.is_sequence_finished == False:
                     current_sequence = ParkingCameraSequence.move_nearby_parking_lot.value
                     self.is_sequence_finished = False
 
-            elif(current_sequence == ParkingCameraSequence.stop.value):
-                self.subscriber.fnDetectionAllowed(False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
-                if self.check_wait_time > 15 :
-                    self.check_wait_time = 0
-                    return
-                else:
-                    self.check_wait_time =self.check_wait_time  +1
+            elif(current_sequence == ParkingCameraSequence.cut_pliers_align_ZX.value):
+                self.is_sequence_finished = self.Action.ClawAlignZX()
+                if self.is_sequence_finished:
+                    current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning_extend.value  
+                    self.is_sequence_finished = False  
+
+            elif(current_sequence == ParkingCameraSequence.cut_pliers_dead_reckoning_extend.value):
+                self.is_sequence_finished = self.Action.DeadMoveX(self.subscriber.cut_pliers_blind_extend_length, speed_k=0.5)
+                if self.is_sequence_finished:
+                    current_sequence = ParkingCameraSequence.close_pliers.value  
+                    self.is_sequence_finished = False  
+
+            elif(current_sequence == ParkingCameraSequence.close_pliers.value):
+                self.is_sequence_finished = self.Action.fnControlClaw(1)  # 關閉剪鉗
+                if self.is_sequence_finished:
+                    current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning_up.value  
+                    self.is_sequence_finished = False
+
+            elif(current_sequence == ParkingCameraSequence.cut_pliers_dead_reckoning_up.value):
+                self.is_sequence_finished = self.Action.DeadMoveZ(target_z=120, speed_k=0.5)
+                if self.is_sequence_finished:
+                    current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning_retract.value  
+                    self.is_sequence_finished = False
+            
+            elif(current_sequence == ParkingCameraSequence.cut_pliers_dead_reckoning_retract.value):
+                self.is_sequence_finished = self.Action.fnRetractArm()
+                if self.is_sequence_finished:
+                    current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning_retract.value  
+                    self.is_sequence_finished = False
             
             else:
                 rospy.logerr('Error: {0} does not exist'.format(current_sequence))
@@ -87,7 +116,7 @@ class PBVS():
                     return
                 else:
                     self.check_wait_time =self.check_wait_time  +1
-               
+    
     def odom_front(self):
         current_sequence = FrontSequence.Front.value
         previous_sequence = None  # 用來記錄上一次的階段
