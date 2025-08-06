@@ -15,8 +15,8 @@ TebLocalPlannerROS:
 
   # Robot
   cmd_angle_instead_rotvel: false
-  max_vel_x: 0.4
-  max_vel_x_backwards: 0.0
+  max_vel_x: 0.15
+  max_vel_x_backwards: 0.2
   max_vel_y: 0.0
   max_vel_theta: 0.4
   acc_lim_x: 0.3
@@ -26,7 +26,7 @@ TebLocalPlannerROS:
   wheelbase: 0.25
   footprint_model:
     type: polygon
-    vertices: [[0.3, 0.265], [0.3, -0.265], [-0.3, -0.265], [-0.3, 0.265]]
+    vertices: [[0.31, 0.25],[0.31, -0.25],[-0.31, -0.25],[-0.31, 0.25],[0.31, 0.25]]
 
   # GoalTolerance
   xy_goal_tolerance: 0.15
@@ -34,7 +34,7 @@ TebLocalPlannerROS:
   free_goal_vel: false
 
   # Obstacles
-  min_obstacle_dist: 0.1  # 從 0.7 降到 0.5
+  min_obstacle_dist: 0.5
   inflation_dist: 0.6
   dynamic_obstacle_inflation_dist: 0.05
   include_costmap_obstacles: true
@@ -64,7 +64,7 @@ TebLocalPlannerROS:
   # weight_dynamic_obstacle: 10
   selection_alternative_time_cost: false
   weight_viapoint: 0.8
-  global_plan_viapoint_sep: 0.3
+  global_plan_viapoint_sep: -1
 
   # Homotopy Class Planner
   enable_homotopy_class_planning: false

@@ -406,7 +406,7 @@ int main(int argc, char **argv) {
         
             //首先，我们将通过tf发布转换
             geometry_msgs::TransformStamped odom_trans;
-            odom_trans.header.stamp = current_time;
+            odom_trans.header.stamp = current_time + ros::Duration(0.03);
             odom_trans.header.frame_id = "odom";
             odom_trans.child_frame_id = "base_link";
 

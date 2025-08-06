@@ -1,13 +1,13 @@
-footprint: [[0.31, 0.25],[0.31, -0.25],[-0.31, -0.25],[-0.31, 0.25],[0.31, 0.25]]  # 與 TEB 一致
+footprint: [[0.31, 0.25],[0.31, -0.25],[-0.31, -0.25],[-0.31, 0.25],[0.31, 0.25]]
 map_type: costmap
 
 obstacle_layer:
   enabled: true
-  max_obstacle_height: 2.0  # 從 3.0 降到 2.0
-  min_obstacle_height: 0.2  # 從 0.05 改為 0.2
-  obstacle_range: 5.0  # 從 3.0 改為 5.0
-  raytrace_range: 6.0  # 從 3.5 改為 6.0
-  inflation_radius: 0.1  # 從 0.1 改為 0.5
+  max_obstacle_height: 3.0
+  min_obstacle_height: 0.0
+  obstacle_range: 5.0
+  raytrace_range: 6.0
+  inflation_radius: 0.1
   combination_method: 1
   observation_sources: scan
   track_unknown_space: true
@@ -20,6 +20,14 @@ obstacle_layer:
   publish_voxel_map: false
   footprint_clearing_enabled: true
 
+  velodyne:
+    data_type: PointCloud2
+    topic: /velodyne_points
+    marking: true
+    clearing: true
+    expected_update_rate: 0
+    max_obstacle_height: 2.0
+    min_obstacle_height: 0.2
   scan:
     data_type: LaserScan
     topic: /scan

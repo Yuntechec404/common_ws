@@ -6,11 +6,7 @@
 ###########################################################################################
 
 TebLocalPlannerROS:
-  min_obstacle_dist: 0.3
-  inflation_dist: 0.3
-  dynamic_obstacle_inflation_dist: 0.25
-  weight_obstacle: 200
-  weight_inflation: 100
+
   ## Costmap converter plugin   
   #costmap_converter_plugin: "costmap_converter::CostmapToPolygonsDBSMCCH"
   costmap_converter_plugin: "costmap_converter::CostmapToLinesDBSRANSAC"
