@@ -48,12 +48,13 @@ double yaw_zero = 0.0;
 bool new_message_received = false;
 string port = "/dev/ttyUSB0";
 int rate;
-string topic_odom, topic_imu, topic_cmd_vel;
+string mode;
+string topic_odom, topic_imu, topic_cmd_vel, topic_external_imu;
 bool publish_tf = true;
 
 // 運動模型
-float wheel_distance = 0.45;    // 左右輪距 (m)
-float max_speed = 1.1;          // 最大輪速 (m/s)
+float wheel_base = 0.45;    // 左右輪距 (m)
+float max_speed = 1.1;      // 最大輪速 (m/s)
 
 // PID 參數
 bool straight_correction = false;
@@ -95,8 +96,8 @@ struct UpstreamData {
     float speed_c;       // C 輪速度 (m/s)
     float speed_d;       // D 輪速度 (m/s)
     float voltage;       // 電池電壓 (V * 100)
-    float roll;          // X 軸角度 (deg)
-    float pitch;         // Y 軸角度 (deg)
+    float roll;          // X 軸角度 (deg) 沒數值
+    float pitch;         // Y 軸角度 (deg) 沒數值
     float reserved[7];   // 預留位
 };
 
@@ -109,7 +110,7 @@ UpstreamData Data_UR;
 void compute_wheel_speeds(float vx, float vy, float omega, float& speed_a, float& speed_b, float& speed_c, float& speed_d) {
     // 假設車輛為四輪差分驅動，輪子分佈為矩形
     // A: 右前輪, B: 左前輪, C: 左後輪, D: 右後輪
-    float L = wheel_distance / 2.0;
+    float L = wheel_base / 2.0;
 
     // 運動學模型：輪速 = (線速度 ± 角速度 * 距離)
     speed_a = speed_d = vx + vy + omega * L; // 右前輪 // 右後輪
@@ -278,16 +279,18 @@ int main(int argc, char **argv) {
     private_np.param<string>("port", port, "/dev/ttyUSB0");
     private_np.param<int>("rate", rate, 200);
     private_np.param<bool>("debug", debug, true);
+    private_np.param<string>("mode", mode, "Wheel-Inertial");
     private_np.param<bool>("straight_correction", straight_correction, false);
     private_np.param<bool>("external_imu", external_imu, false);
     private_np.param<double>("Kp", Kp, 0.035);
     private_np.param<double>("Ki", Ki, 0.05);
     private_np.param<double>("Kd", Kd, 0.0);
-    private_np.param<string>("topic_cmd_vel", topic_cmd_vel, "cmd_vel");
+    private_np.param<string>("topic_cmd_vel", topic_cmd_vel, "/cmd_vel");
+    private_np.param<string>("topic_external_imu", topic_external_imu, "/mpu6050/data_raw");
+    private_np.param<string>("topic_odom", topic_odom, "/odom");
     private_np.param<string>("topic_imu", topic_imu, "/imu/data");
-    private_np.param<string>("topic_odom", topic_odom, "odom");
     private_np.param<bool>("publish_tf", publish_tf, true);
-    private_np.param<float>("wheel_distance", wheel_distance, 0.5);
+    private_np.param<float>("wheel_base", wheel_base, 0.5);
     private_np.param<float>("max_speed", max_speed, 1.1);
 
     ros::Subscriber chatter_sub, imu_sub;
@@ -295,8 +298,9 @@ int main(int argc, char **argv) {
     if (external_imu)
         imu_sub = np.subscribe(topic_imu, 10, imuCallback);
 
-    ros::Publisher odom_pub = n.advertise<nav_msgs::Odometry>(topic_odom, 50);
-    ros::Publisher power_voltage_pub = n.advertise<std_msgs::Float64>("car_voltage", 10);
+    ros::Publisher odom_pub = n.advertise<nav_msgs::Odometry>(topic_odom, rate);
+    ros::Publisher imu_pub = n.advertise<sensor_msgs::Imu>(topic_external_imu, rate);
+    ros::Publisher power_voltage_pub = n.advertise<std_msgs::Float64>("car_voltage", rate/5);
     std_msgs::Float64 voltage;
 
     tf::TransformBroadcaster odom_broadcaster;
@@ -379,19 +383,34 @@ int main(int argc, char **argv) {
             current_time = ros::Time::now();//记录当前时间
             dt = (current_time - last_time).toSec();
 
-            if (!external_imu) {
-                Yaw = Data_UR.yaw * to_rad;
+            if (mode == "Wheel") {
+                // 右側（A, D）、左側（B, C）平均輪速（已用 Power_*_* 帶好方向）
+                double v_right = (Power_A_X + Power_D_X) * 0.5;
+                double v_left  = (Power_B_X + Power_C_X) * 0.5;
+                vth = (v_right - v_left) / 0.7; // 以左右差速估算角速度（rad/s）
+
                 if (!yaw_zero_set) { // 設定偏航角零點
                     yaw_zero = Yaw;
                     yaw_zero_set = true;
                 }
-                th = angles::normalize_angle(Yaw - yaw_zero);
-            } else {
-                if (!yaw_zero_set) { // 設定偏航角零點
-                    yaw_zero = current_yaw;
-                    yaw_zero_set = true;
+                th = angles::normalize_angle(th + vth * dt); // 積分得到 yaw
+            }
+
+            if (mode == "Wheel-Inertial") {
+                if (!external_imu) {
+                    Yaw = Data_UR.yaw * to_rad;
+                    if (!yaw_zero_set) { // 設定偏航角零點
+                        yaw_zero = Yaw;
+                        yaw_zero_set = true;
+                    }
+                    th = angles::normalize_angle(Yaw - yaw_zero);
+                } else {
+                    if (!yaw_zero_set) { // 設定偏航角零點
+                        yaw_zero = current_yaw;
+                        yaw_zero_set = true;
+                    }
+                    th = angles::normalize_angle(current_yaw - yaw_zero);
                 }
-                th = angles::normalize_angle(current_yaw - yaw_zero);
             }
 
             // delta_x, delta_y 使用 th
@@ -406,7 +425,7 @@ int main(int argc, char **argv) {
         
             //首先，我们将通过tf发布转换
             geometry_msgs::TransformStamped odom_trans;
-            odom_trans.header.stamp = current_time + ros::Duration(0.03);
+            odom_trans.header.stamp = current_time;
             odom_trans.header.frame_id = "odom";
             odom_trans.child_frame_id = "base_link";
 
@@ -429,7 +448,7 @@ int main(int argc, char **argv) {
             //设置位置
             odom.pose.pose.position.x = x;
             odom.pose.pose.position.y = y;
-            odom.pose.pose.position.z = th;
+            odom.pose.pose.position.z = 0.0;
             odom.pose.pose.orientation = odom_quat;
 
             //设定速度
@@ -446,14 +465,33 @@ int main(int argc, char **argv) {
                                     0, 0, 0, 0, 1e6, 0,
                                     0, 0, 0, 0, 0, 1e3};
             odom.twist.covariance = {1e-3, 0, 0, 0, 0, 0,
-                                        0, 1e-3, 0, 0, 0, 0,
-                                        0, 0, 1e6, 0, 0, 0,
-                                        0, 0, 0, 1e6, 0, 0,
-                                        0, 0, 0, 0, 1e6, 0,
-                                        0, 0, 0, 0, 0, 1e3};
+                                    0, 1e-3, 0, 0, 0, 0,
+                                    0, 0, 1e6, 0, 0, 0,
+                                    0, 0, 0, 1e6, 0, 0,
+                                    0, 0, 0, 0, 1e6, 0,
+                                    0, 0, 0, 0, 0, 1e3};
 
             //发布消息
             odom_pub.publish(odom);
+
+
+            // 發布 IMU
+            sensor_msgs::Imu imu;
+            imu.header.stamp = current_time;
+            imu.header.frame_id = "imu_link";
+
+            imu.orientation = tf::createQuaternionMsgFromYaw(Data_UR.yaw);
+
+            imu.angular_velocity.x = Data_UR.gyro_roll * to_rad;
+            imu.angular_velocity.y = Data_UR.gyro_pitch * to_rad;
+            imu.angular_velocity.z = Data_UR.gyro_yaw * to_rad;
+
+            imu.linear_acceleration.x = Data_UR.accel_x * (4.5f / 65536.0f) * 9.81f;
+            imu.linear_acceleration.y = Data_UR.accel_y * (4.5f / 65536.0f) * 9.81f;
+            imu.linear_acceleration.z = Data_UR.accel_z * (4.5f / 65536.0f) * 9.81f;
+
+            imu_pub.publish(imu);
+
 
             last_time = current_time;//保存为上次时间
         }

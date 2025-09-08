@@ -1,13 +1,15 @@
 <launch>
-    <node name="listener" pkg="four_wheel_car_controller" type="car_controller" output="screen">
+    <node name="car_controller" pkg="four_wheel_car_controller" type="car_controller" output="screen">
         <param name="port"  type="str"  value="/dev/ttyUSB0" /> <!-- 設備埠號 -->
         <param name="rate"  type="int"  value="50" />           <!-- 執行頻率 -->
         <param name="debug" type="bool" value="false" />        <!-- 發佈日誌 -->
+        <!-- 里程計模式："Wheel", "-Inertial" -->
+        <param name="mode"  type="str"  value="Wheel-Inertial" />
 
-        <param name="wheel_distance"    type="double" value="0.5" />    <!-- 車輛軸距 -->
-        <param name="max_speed"         type="double" value="1.1" />    <!-- 最高速度 -->
+        <param name="wheel_base"    type="double" value="0.5" />    <!-- 車輛軸距 -->
+        <param name="max_speed"     type="double" value="1.1" />    <!-- 最高速度 -->
         
-        <param name="straight_correction" type="bool" value="false" />   <!-- 啟用直線補償 -->
+        <param name="straight_correction" type="bool" value="false" />  <!-- 啟用直線補償 -->
         <param name="external_imu"        type="bool" value="false" />  <!-- 使用外部陀螺儀 -->
 
         <!-- 直線補償 -->
@@ -15,10 +17,13 @@
         <param name="Ki" type="double" value="0.05" />                  <!-- I 控制器 -->
         <param name="Kd" type="double" value="0.01" />                  <!-- D 控制器 -->
 
-        <param name="topic_cmd_vel" type="str" value="/cmd_vel" />      <!-- 訂閱速度命令 -->
-        <param name="topic_imu"     type="str" value="/imu/data" />     <!-- 訂閱慣性陀螺儀 -->
+        <!-- 訂閱 Topic -->
+        <param name="topic_cmd_vel"         type="str" value="/cmd_vel" />  <!-- 訂閱速度命令 -->
+        <param name="topic_external_imu"    type="str" value="/imu/data" /> <!-- 訂閱慣性量測單元 -->
 
-        <param name="topic_odom"    type="str" value="wheel_odom" />    <!-- 發佈車輪里程計 -->
-        <param name="publish_tf"    type="bool" value="false" />         <!-- 發佈 tf 轉換 -->
+        <!-- 發佈 Topic -->
+        <param name="topic_odom"    type="str" value="/odom" />             <!-- 發佈車輪里程計 -->
+        <param name="topic_imu"     type="str" value="/mpu6050/data_raw" /> <!-- 發佈慣性量測單元 -->
+        <param name="publish_tf"    type="bool" value="false" />            <!-- 發佈 tf 轉換 -->
     </node>
 </launch>
