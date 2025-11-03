@@ -80,7 +80,7 @@ int main(int argc, char **argv){
     std::string port_name;
     int baudrate, timeout_ms;
 
-    np.param<std::string>("port", port_name, "/dev/ttyUSB0");
+    np.param<std::string>("port", port_name, "/dev/ttyUSB1");
     np.param<int>("baudrate", baudrate, 115200);
     np.param<int>("timeout_ms", timeout_ms, 100);
 

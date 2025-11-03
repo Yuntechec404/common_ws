@@ -10,6 +10,7 @@ geometry_msgs
 tf 
 forklift_msg  
 message_generation
+ros_foundationpose
 )
 find_package(Boost REQUIRED COMPONENTS system)
 

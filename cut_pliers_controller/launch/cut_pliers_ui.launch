@@ -1,0 +1,16 @@
+<launch>
+  <!-- 底層串口節點 -->
+  <node pkg="cut_pliers_controller" type="cut_pliers_arm1" name="cut_pliers_arm1" output="screen">
+    <param name="port" value="/dev/ttyUSB1"/>
+    <param name="baudrate" value="115200"/>
+    <param name="timeout" value="100"/>
+    <param name="log" value="true"/>
+    <!-- CmdCutPliersPublisher 參數 -->
+    <param name="cmd_topic" value="/cmd_cut_pliers_1"/>
+    <param name="allow_retract" value="true"/>
+    <param name="log" value="false"/>
+  </node>
+
+  <!-- Tk UI -->
+  <node pkg="cut_pliers_controller" type="ros_cut_pliers_ui.py" name="cut_pliers_ui" output="screen"/>
+</launch>

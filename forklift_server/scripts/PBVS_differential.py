@@ -38,7 +38,7 @@ class PBVS():
         self.check_wait_time = 0
         self.Action = Action(self.subscriber)
 
-    def parking_camera(self):
+    def fruit_docking(self):
         current_sequence = ParkingCameraSequence.initial_marker.value
         previous_sequence = None  # 用來記錄上一次的階段
 
@@ -63,50 +63,63 @@ class PBVS():
                     current_sequence = ParkingCameraSequence.parking.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingCameraSequence.parking.value):
+                self.subscriber.fnDetectionAllowed(True, self.layer_dist)  # fnDetectionAllowed(self, pose_detection, layer)
                 self.is_sequence_finished = self.Action.fnSeqParking(self.subscriber.camera_horizon_alignment_threshold, 0.2)
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingCameraSequence.decide.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingCameraSequence.decide.value):
-                self.is_sequence_finished = self.Action.fnSeqdecide(self.subscriber.camera_desired_dist_threshold, self.subscriber.camera_horizon_alignment_threshold )
+                ok_all, dist_ok = self.Action.fnSeqdecide(self.subscriber.camera_desired_dist_threshold, self.subscriber.camera_horizon_alignment_threshold )
                 
-                if self.is_sequence_finished == True:
+                if ok_all == True:
                     current_sequence = ParkingCameraSequence.cut_pliers_align_ZX.value
                     self.is_sequence_finished = False
-                elif self.is_sequence_finished == False:
-                    current_sequence = ParkingCameraSequence.move_nearby_parking_lot.value
+                    ok_all = False
+                else:
+                    current_sequence = (ParkingCameraSequence.parking.value if dist_ok else ParkingCameraSequence.move_nearby_parking_lot.value)
                     self.is_sequence_finished = False
+                    dist_ok = False
+                    ok_all = False
 
             elif(current_sequence == ParkingCameraSequence.cut_pliers_align_ZX.value):
-                self.is_sequence_finished = self.Action.ClawAlignZX()
+                # self.is_sequence_finished = self.Action.ClawAlignZX()
+                self.is_sequence_finished = self.Action.fnControlArmBasedOnFruitZ()
                 if self.is_sequence_finished:
                     current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning_extend.value  
                     self.is_sequence_finished = False  
 
             elif(current_sequence == ParkingCameraSequence.cut_pliers_dead_reckoning_extend.value):
-                self.is_sequence_finished = self.Action.DeadMoveX(self.subscriber.cut_pliers_blind_extend_length, speed_k=0.5)
+                # self.is_sequence_finished = self.Action.DeadMoveX(self.subscriber.cut_pliers_blind_extend_length, speed_k=0.5)
+                self.is_sequence_finished = self.Action.fnControlArmBasedOnFruitX()
                 if self.is_sequence_finished:
-                    current_sequence = ParkingCameraSequence.close_pliers.value  
+                    current_sequence = ParkingCameraSequence.stop.value  
                     self.is_sequence_finished = False  
 
-            elif(current_sequence == ParkingCameraSequence.close_pliers.value):
-                self.is_sequence_finished = self.Action.fnControlClaw(1)  # 關閉剪鉗
-                if self.is_sequence_finished:
-                    current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning_up.value  
-                    self.is_sequence_finished = False
+            # elif(current_sequence == ParkingCameraSequence.close_pliers.value):
+            #     self.is_sequence_finished = self.Action.fnControlClaw(1)  # 關閉剪鉗
+            #     if self.is_sequence_finished:
+            #         current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning_up.value  
+            #         self.is_sequence_finished = False
 
-            elif(current_sequence == ParkingCameraSequence.cut_pliers_dead_reckoning_up.value):
-                self.is_sequence_finished = self.Action.DeadMoveZ(target_z=120, speed_k=0.5)
-                if self.is_sequence_finished:
-                    current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning_retract.value  
-                    self.is_sequence_finished = False
+            # elif(current_sequence == ParkingCameraSequence.cut_pliers_dead_reckoning_up.value):
+            #     self.is_sequence_finished = self.Action.DeadMoveZ(target_z=120, speed_k=0.5)
+            #     if self.is_sequence_finished:
+            #         current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning_retract.value  
+            #         self.is_sequence_finished = False
             
-            elif(current_sequence == ParkingCameraSequence.cut_pliers_dead_reckoning_retract.value):
-                self.is_sequence_finished = self.Action.fnRetractArm()
-                if self.is_sequence_finished:
-                    current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning_retract.value  
-                    self.is_sequence_finished = False
+            # elif(current_sequence == ParkingCameraSequence.cut_pliers_dead_reckoning_retract.value):
+            #     self.is_sequence_finished = self.Action.fnRetractArm()
+            #     if self.is_sequence_finished:
+            #         current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning_retract.value  
+            #         self.is_sequence_finished = False
+            elif(current_sequence == ParkingCameraSequence.stop.value):
+                self.subscriber.fnDetectionAllowed(False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
+                if self.check_wait_time > 15 :
+                    self.check_wait_time = 0
+                    return
+                else:
+                    self.check_wait_time =self.check_wait_time  +1
             
             else:
                 rospy.logerr('Error: {0} does not exist'.format(current_sequence))

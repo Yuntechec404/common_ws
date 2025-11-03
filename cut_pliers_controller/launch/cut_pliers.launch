@@ -10,6 +10,7 @@
     <param name="last_valid_length" value="10"/>
     <param name="claw" value="false"/>
     <param name="allow_retract" value="false"/>
+    <param name="log" value="false"/>
   </node>
 
   <!-- Arm 2 -->

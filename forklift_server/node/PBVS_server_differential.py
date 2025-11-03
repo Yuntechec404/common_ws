@@ -7,7 +7,7 @@ import tf
 from geometry_msgs.msg import Twist, Pose
 from nav_msgs.msg import Odometry
 import math
-from visp_megapose.msg import Confidence
+from ros_foundationpose.msg import Confidence
 from cut_pliers_controller.msg import CmdCutPliers
 
 import sys
@@ -38,7 +38,7 @@ class Subscriber():
         self.object_filter = rospy.get_param(rospy.get_name() + "/object_filter", True)
         self.confidence_minimum = rospy.get_param(rospy.get_name() + "/confidence_minimum", 0.5)
         self.arm_status_topic = rospy.get_param(rospy.get_name() + "/arm_status_topic", "/arm_current_status")
-        self.arm_control_topic = rospy.get_param(rospy.get_name() + "/arm_control_topic", "/cmd_cut_pliers")
+        self.arm_control_topic = rospy.get_param(rospy.get_name() + "/arm_control_topic", "/cmd_cut_pliers_1")  # ← 改這裡
 
         rospy.loginfo("Get subscriber topic parameter")
         rospy.loginfo("arm_ID: {}, type: {}".format(self.arm_ID, type(self.arm_ID)))
@@ -51,37 +51,78 @@ class Subscriber():
         self.camera_tag_offset_x = rospy.get_param(rospy.get_name() + "/camera_tag_offset_x", 0.0)
         self.camera_desired_dist_threshold = rospy.get_param(rospy.get_name() + "/camera_desired_dist_threshold", 0.0)
         self.camera_horizon_alignment_threshold = rospy.get_param(rospy.get_name() + "/camera_horizon_alignment_threshold", 0.0)
+        self.camera_side = rospy.get_param(rospy.get_name() + "/camera_side", "left").strip().lower()
+        if self.camera_side not in ("left", "right"):
+            rospy.logwarn("camera_side should be 'left' or 'right'; got %s -> default to 'left'", self.camera_side)
+            self.camera_side = "left"
+        self.turn_dir_deg = -90 if self.camera_side == "right" else +90
 
         rospy.loginfo("Get camera parking parameter")
+        rospy.loginfo("camera_side: {}, type: {}".format(self.camera_side, type(self.camera_side)))
+        rospy.loginfo("camera_side=%s, first turn_dir_deg=%d", self.camera_side, self.turn_dir_deg)
         rospy.loginfo("camera_tag_offset_x: {}, type: {}".format(self.camera_tag_offset_x, type(self.camera_tag_offset_x)))
-        rospy.loginfo("camera_desired_dist_threshold: {}, type: {}".format(self.camera_desired_dist_threshold, type(self.camera_desired_dist_threshold)))        
+        rospy.loginfo("camera_desired_dist_threshold: {}, type: {}".format(self.camera_desired_dist_threshold, type(self.camera_desired_dist_threshold)))
         rospy.loginfo("camera_horizon_alignment_threshold: {}, type: {}".format(self.camera_horizon_alignment_threshold, type(self.camera_horizon_alignment_threshold)))
 
         # Cut pliers (arm) control settings
-        self.cut_pliers_lower_z = rospy.get_param(rospy.get_name() + "/cut_pliers_lower_z", 0.022)
-        self.cut_pliers_upper_z = rospy.get_param(rospy.get_name() + "/cut_pliers_upper_z", 0.028)
-        self.cut_pliers_height_increment = rospy.get_param(rospy.get_name() + "/cut_pliers_height_increment", 10.0)
+        self.spin_forward_comp = rospy.get_param(rospy.get_name() + "/spin_forward_comp", 0.0)
+
+        # === Anti-overshoot 參數（mm 單位）===
+        self.marker_to_mm     = rospy.get_param(rospy.get_name() + "/marker_to_mm", 1000.0)
+        self.z_lead_near_mm   = rospy.get_param(rospy.get_name() + "/z_lead_near_mm", 6.0)
+        self.z_lead_far_mm    = rospy.get_param(rospy.get_name() + "/z_lead_far_mm", 12.0)
+        self.z_lead_switch_mm = rospy.get_param(rospy.get_name() + "/z_lead_switch_mm", 25.0)
+        self.z_step_max_mm    = rospy.get_param(rospy.get_name() + "/z_step_max_mm", 30.0)
+
+        self.x_lead_near_mm   = rospy.get_param(rospy.get_name() + "/x_lead_near_mm", 10.0)
+        self.x_lead_far_mm    = rospy.get_param(rospy.get_name() + "/x_lead_far_mm", 20.0)
+        self.x_lead_switch_mm = rospy.get_param(rospy.get_name() + "/x_lead_switch_mm", 40.0)
+        self.x_step_max_mm    = rospy.get_param(rospy.get_name() + "/x_step_max_mm", 50.0)
+
+        self.zx_stable_frames = rospy.get_param(rospy.get_name() + "/zx_stable_frames", 5)
+
+        # 安全行程（mm）
         self.cut_pliers_min_height = rospy.get_param(rospy.get_name() + "/cut_pliers_min_height", 0.0)
         self.cut_pliers_max_height = rospy.get_param(rospy.get_name() + "/cut_pliers_max_height", 280.0)
-        self.cut_pliers_target_x = rospy.get_param(rospy.get_name() + "/cut_pliers_target_x", -0.13)
-        self.cut_pliers_length_increment = rospy.get_param(rospy.get_name() + "/cut_pliers_length_increment", 10.0)
+        self.cut_pliers_min_length = rospy.get_param(rospy.get_name() + "/cut_pliers_min_length", 10.0)
         self.cut_pliers_max_length = rospy.get_param(rospy.get_name() + "/cut_pliers_max_length", 440.0)
-        self.cut_pliers_blind_extend_length = rospy.get_param(rospy.get_name() + "/cut_pliers_blind_extend_length", 78.0)
-        self.cut_pliers_retract_length = rospy.get_param(rospy.get_name() + "/cut_pliers_retract_length", 10.0)
-        
+
+        # Z 允許帶 / 自適應步長
+        self.cut_pliers_lower_z = rospy.get_param(rospy.get_name() + "/cut_pliers_lower_z", 0.022)
+        self.cut_pliers_upper_z = rospy.get_param(rospy.get_name() + "/cut_pliers_upper_z", 0.028)
+        self.z_step_min_mm      = rospy.get_param(rospy.get_name() + "/z_step_min_mm", 3.0)
+        self.z_step_max_mm      = rospy.get_param(rospy.get_name() + "/z_step_max_mm", 20.0)
+        self.z_step_gain        = rospy.get_param(rospy.get_name() + "/z_step_gain", 0.7)
+
+        # X 目標 / 自適應步長
+        self.cut_pliers_target_x    = rospy.get_param(rospy.get_name() + "/cut_pliers_target_x", 0.13)
+        self.x_step_min_mm          = rospy.get_param(rospy.get_name() + "/x_step_min_mm", 5.0)
+        self.x_step_max_mm          = rospy.get_param(rospy.get_name() + "/x_step_max_mm", 50.0)
+        self.x_step_gain            = rospy.get_param(rospy.get_name() + "/x_step_gain", 0.7)
+        self.cut_pliers_allow_retract = rospy.get_param(rospy.get_name() + "/cut_pliers_allow_retract", True)
+        self.x_tolerance_m          = rospy.get_param(rospy.get_name() + "/x_tolerance_m", 0.005)
+
         rospy.loginfo("Get cut pliers (arm) control parameters")
-        rospy.loginfo("cut_pliers_lower_z: {}, type: {}".format(self.cut_pliers_lower_z, type(self.cut_pliers_lower_z)))
-        rospy.loginfo("cut_pliers_upper_z: {}, type: {}".format(self.cut_pliers_upper_z, type(self.cut_pliers_upper_z)))
-        rospy.loginfo("cut_pliers_height_increment: {}, type: {}".format(self.cut_pliers_height_increment, type(self.cut_pliers_height_increment)))
-        rospy.loginfo("cut_pliers_min_height: {}, type: {}".format(self.cut_pliers_min_height, type(self.cut_pliers_min_height)))
-        rospy.loginfo("cut_pliers_max_height: {}, type: {}".format(self.cut_pliers_max_height, type(self.cut_pliers_max_height)))
-        rospy.loginfo("cut_pliers_target_x: {}, type: {}".format(self.cut_pliers_target_x, type(self.cut_pliers_target_x)))
-        rospy.loginfo("cut_pliers_length_increment: {}, type: {}".format(self.cut_pliers_length_increment, type(self.cut_pliers_length_increment)))
-        rospy.loginfo("cut_pliers_max_length: {}, type: {}".format(self.cut_pliers_max_length, type(self.cut_pliers_max_length)))
-        rospy.loginfo("cut_pliers_blind_extend_length: {}, type: {}".format(self.cut_pliers_blind_extend_length, type(self.cut_pliers_blind_extend_length)))
-        rospy.loginfo("cut_pliers_retract_length: {}, type: {}".format(self.cut_pliers_retract_length, type(self.cut_pliers_retract_length)))
-
-
+        rospy.loginfo("spin_forward_comp: %s", self.spin_forward_comp)
+        rospy.loginfo("marker_to_mm: %s", self.marker_to_mm)
+        rospy.loginfo("z_lead_near_mm: %s", self.z_lead_near_mm)
+        rospy.loginfo("z_lead_far_mm: %s", self.z_lead_far_mm)
+        rospy.loginfo("z_lead_switch_mm: %s", self.z_lead_switch_mm)
+        rospy.loginfo("z_step_max_mm: %s", self.z_step_max_mm)
+        rospy.loginfo("x_lead_near_mm: %s", self.x_lead_near_mm)
+        rospy.loginfo("x_lead_far_mm: %s", self.x_lead_far_mm)
+        rospy.loginfo("x_lead_switch_mm: %s", self.x_lead_switch_mm)
+        rospy.loginfo("x_step_max_mm: %s", self.x_step_max_mm)
+        rospy.loginfo("zx_stable_frames: %s", self.zx_stable_frames)
+        rospy.loginfo("cut_pliers_min_height: %s", self.cut_pliers_min_height)
+        rospy.loginfo("cut_pliers_max_height: %s", self.cut_pliers_max_height)
+        rospy.loginfo("cut_pliers_min_length: %s", self.cut_pliers_min_length)
+        rospy.loginfo("cut_pliers_max_length: %s", self.cut_pliers_max_length)
+        rospy.loginfo("cut_pliers_lower_z: %s", self.cut_pliers_lower_z)
+        rospy.loginfo("cut_pliers_upper_z: %s", self.cut_pliers_upper_z)
+        rospy.loginfo("cut_pliers_target_x: %s", self.cut_pliers_target_x)
+        rospy.loginfo("cut_pliers_allow_retract: %s", self.cut_pliers_allow_retract)
+        rospy.loginfo("x_tolerance_m: %s", self.x_tolerance_m)
 
     def init_parame(self):
         # Odometry_param
@@ -191,19 +232,44 @@ class Subscriber():
     def SpinOnce_confidence(self):
         return self.sub_detectionConfidence
 
-    def cbGetObject(self, msg):
-        try:
-            marker_msg = msg
-            quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
-            theta = tf.transformations.euler_from_quaternion(quaternion)[1]
-            self.marker_2d_pose_x = -marker_msg.position.z
-            self.marker_2d_pose_y = marker_msg.position.x + self.camera_tag_offset_x
-            self.marker_2d_pose_z = marker_msg.position.y  # 更新z轴信息
-            self.marker_2d_theta = -theta
-            # rospy.loginfo("Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
-        except:
-            pass
+    # def cbGetObject(self, msg):
+    #     try:
+    #         marker_msg = msg
+    #         quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
+    #         theta = tf.transformations.euler_from_quaternion(quaternion)[1]
+    #         self.marker_2d_pose_x = -marker_msg.position.z
+    #         self.marker_2d_pose_y = marker_msg.position.x + self.camera_tag_offset_x
+    #         self.marker_2d_pose_z = marker_msg.position.y  # 更新z轴信息
+    #         self.marker_2d_theta = -theta
+    #         # rospy.loginfo("Pose: x={:.3f}, y={:.3f}, theta={:.3f}".format(self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_theta))
+    #     except:
+    #         pass
+    # def cbGetObject(self, msg):
+    #     px, py, pz = msg.position.x, msg.position.y, msg.position.z
+    #     self.marker_2d_pose_x = -pz
 
+    #     side_sign = -1 if self.camera_side == "right" else +1
+    #     self.marker_2d_pose_x = -pz
+    #     self.marker_2d_pose_y = side_sign * px + self.camera_tag_offset_x
+    #     self.marker_2d_pose_z = py
+    #     lateral  = side_sign * px
+    #     forward  = -pz
+    #     self.marker_2d_theta = math.atan2(lateral, forward)
+
+    def cbGetObject(self, msg):
+        px, py, pz = msg.position.x, msg.position.y, msg.position.z
+
+        side_sign = -1 if self.camera_side == "right" else +1
+
+        # 推薦語意：forward(+)=cam.z、up(+)= -cam.y、lateral(+left/right)= ±cam.x
+        self.marker_2d_pose_x = +pz                              # 伸長：向前為正
+        self.marker_2d_pose_y = side_sign * px + self.camera_tag_offset_x  # 橫向（視相機左右翻轉）
+        self.marker_2d_pose_z = -py                              # 高度：向上為正
+
+        lateral = side_sign * px
+        forward = +pz
+        self.marker_2d_theta = math.atan2(lateral, forward)
+        
     def cbGetOdom(self, msg):
         if self.is_odom_received == False:
             self.is_odom_received = True 
@@ -231,8 +297,8 @@ class Subscriber():
         self.robot_2d_theta = self.total_robot_2d_theta
 
     def cbGetObjectConfidence(self, msg):
-        self.sub_detectionConfidence.pose_confidence = msg.object_confidence
-        self.sub_detectionConfidence.pose_detection = msg.model_detection
+        self.sub_detectionConfidence.pose_confidence = msg.object_IoU
+        self.sub_detectionConfidence.pose_detection = msg.object_detection
  
 class PBVSAction():
     def __init__(self, name):
