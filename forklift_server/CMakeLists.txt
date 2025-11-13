@@ -10,7 +10,6 @@ geometry_msgs
 tf 
 forklift_msg  
 message_generation
-ros_foundationpose
 )
 find_package(Boost REQUIRED COMPONENTS system)
 
@@ -21,10 +20,10 @@ add_action_files(
   FILES PBVSMegapose.action
 )
 
-add_message_files(
-  FILES
-  Detection.msg
-)
+# add_message_files(
+#   FILES
+#   Detection.msg
+# )
 
 generate_messages(
   DEPENDENCIES actionlib_msgs std_msgs geometry_msgs

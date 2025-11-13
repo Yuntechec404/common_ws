@@ -36,7 +36,7 @@
 
         <!--forkcamera parking setting/-->
         <param name="forkcamera_parking_fork_layer1" type="double" value = "0.02" /><!--牙叉相機對位初始牙叉高度, 為了將牙叉相機與棧板高度一致/-->
-        <param name="forkcamera_parking_fork_layer2" type="double" value = "0.26" /><!--牙叉相機對位初始牙叉高度, 為了將牙叉相機與棧板高度一致/-->
+        <param name="forkcamera_parking_fork_layer2" type="double" value = "0.25" /><!--牙叉相機對位初始牙叉高度, 為了將牙叉相機與棧板高度一致/-->
         <param name="forkcamera_tag_offset_x" type="double" value = "0.0" /><!--對位目標點與tag的左右偏移量/-->
         <param name="forkcamera_ChangingDirection_threshold" type="double" value = "0.01" />  <!--正對Tag(atan2(y, x) <= threshold) threshold/-->
         <param name="forkcamera_parking_stop" type="double" value = "0.6" /><!--牙叉相機對位停止距離/-->
@@ -46,11 +46,11 @@
 
         <!--Raise the pallet setting/-->
         <param name="raise_pallet_fork_init_layer1" type="double" value = "0.0" /><!--插起棧板的初始牙叉高度/-->
-        <param name="raise_pallet_fork_init_layer2" type="double" value = "0.25" /><!--插起棧板的初始牙叉高度/-->
+        <param name="raise_pallet_fork_init_layer2" type="double" value = "0.23" /><!--插起棧板的初始牙叉高度/-->
         <param name="raise_pallet_dead_reckoning_dist" type="double" value = "0.42" /><!--直線移動到距離Tag多少公尺的地方/-->
         <!-- <param name="raise_pallet_fork_forward_distance" type="double" value = "0.655" />牙叉前伸的距離/ -->
         <param name="raise_pallet_raise_height_layer1" type="double" value = "0.11" /><!--牙叉叉起棧板的高度/-->
-        <param name="raise_pallet_raise_height_layer2" type="double" value = "0.33" /><!--牙叉叉起棧板的高度/-->
+        <param name="raise_pallet_raise_height_layer2" type="double" value = "0.31" /><!--牙叉叉起棧板的高度/-->
         <param name="raise_pallet_back_distance" type="double" value = "1.0" /><!--插起棧板後，後退距離/-->
         <!-- <param name="raise_pallet_navigation_helght" type="double" value = "0.12" />完成插起棧板動作後，接續下一個動作時牙叉高度/ -->
 

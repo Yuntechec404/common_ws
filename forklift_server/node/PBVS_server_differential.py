@@ -2,12 +2,11 @@
 # -*- coding: utf-8 -*-
 import rospy
 import actionlib
-import forklift_server.msg
 import tf
 from geometry_msgs.msg import Twist, Pose
 from nav_msgs.msg import Odometry
 import math
-from ros_foundationpose.msg import Confidence
+from forklift_msg.msg import Confidence, Detection
 from cut_pliers_controller.msg import CmdCutPliers
 
 import sys
@@ -159,7 +158,7 @@ class Subscriber():
         self.object_pose_sub = rospy.Subscriber(object_pose, Pose, self.cbGetObject, queue_size = 1)
         self.object_pose_confidence_sub = rospy.Subscriber(self.pose_topic + "_confidence", Confidence, self.cbGetObjectConfidence, queue_size = 1)
         
-        self.pose_detection_pub = rospy.Publisher(self.pose_topic + "_detection", forklift_server.msg.Detection, queue_size = 1, latch=True)
+        self.pose_detection_pub = rospy.Publisher(self.pose_topic + "_detection", Detection, queue_size = 1, latch=True)
         
         # 新增手臂相關訂閱和發布
         self.arm_status_sub = rospy.Subscriber(self.arm_status_topic, CmdCutPliers, self.arm_status_callback, queue_size=1)
@@ -167,7 +166,7 @@ class Subscriber():
         self.arm_control_pub = rospy.Publisher(self.arm_control_topic, CmdCutPliers, queue_size=1, latch=True)
 
     def fnDetectionAllowed(self, pose_detection, layer):
-        pose_msg = forklift_server.msg.Detection()
+        pose_msg = Detection()
         pose_msg.detection_allowed = pose_detection
         pose_msg.layer = layer
         # self.shelf_detection_pub.publish(pose_msg)

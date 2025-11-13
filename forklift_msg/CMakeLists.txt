@@ -11,6 +11,8 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   FILES
   meteorcar.msg
+  Detection.msg
+  Confidence.msg
 )
 
 generate_messages(

@@ -1,0 +1,12 @@
+<launch>
+  <node pkg="circular_saw_controller" type="circular_saw" name="circular_saw" output="screen">
+    <param name="port" value="/dev/ttyUSB1"/>
+    <param name="baudrate" value="115200"/>
+    <param name="timeout" value="100"/>
+    <param name="cmd_topic" value="/circular_saw"/>
+    <param name="target_height" value="140"/>
+    <param name="target_length" value="-1"/>
+    <param name="last_valid_length" value="10"/>
+    <param name="log" value="false"/>
+  </node>
+</launch>
