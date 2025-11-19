@@ -3,10 +3,8 @@
     <param name="port" value="/dev/ttyUSB1"/>
     <param name="baudrate" value="115200"/>
     <param name="timeout" value="100"/>
-    <param name="cmd_topic" value="/circular_saw"/>
-    <param name="target_height" value="0"/>
-    <param name="target_length" value="0"/>
-    <param name="target_angle" value="0"/>
     <param name="log" value="false"/>
   </node>
+
+  <node pkg="circular_saw_controller" type="circular_saw_ui.py" name="circular_saw_ui" output="screen"/>
 </launch>
