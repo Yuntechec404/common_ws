@@ -45,17 +45,6 @@ class Action():
         # other
         self.check_wait_time = 0
         self.is_triggered = False
-        # arm
-        self.current_arm_status = self.Subscriber.current_arm_status
-        # 初始化 y_pose_history 和窗口大小
-        # self.y_pose_history = []
-        # self.moving_average_window = 5
-        # self.arm_control_pub = rospy.Publisher("/cmd_cut_pliers", CmdCutPliers, queue_size=10)
-        # 用於儲存最新的手臂狀態
-        
-        # 訂閱 /arm_current_status 話題
-        # self.arm_status_sub = rospy.Subscriber("/arm_current_status", CmdCutPliers, self.arm_status_callback, queue_size=1)
-
 
     def SpinOnce(self):
         (self.robot_2d_pose_x, self.robot_2d_pose_y, self.robot_2d_theta, \
@@ -306,22 +295,22 @@ class Action():
         raw = k * err_mm
         return int(max(mm_min, min(mm_max, raw)))
     
-    def fnControlArmBasedOnFruitZ(self, timeout=10.0, tolerance=4):
+    def fnControlArmBasedOnFruitZ(self, timeout=10.0):
         """
-        距離越近步距越小：根據與允許帶的距離自動縮小步長。
+        |relative_z_mm| ≤ z_tolerance_mm → 成功
         """
         start = time.time()
 
-        # 允許帶、動作限制
-        lower_z = float(self.Subscriber.cut_pliers_lower_z)   # m
-        upper_z = float(self.Subscriber.cut_pliers_upper_z)   # m
         Z_MIN = float(self.Subscriber.cut_pliers_min_height)
         Z_MAX = float(self.Subscriber.cut_pliers_max_height)
 
-        # 自動步長（mm）範圍與斜率
-        Z_STEP_MIN = float(getattr(self.Subscriber, "z_step_min_mm", 3.0))
-        Z_STEP_MAX = float(getattr(self.Subscriber, "z_step_max_mm", 30.0))
-        Z_K = float(getattr(self.Subscriber, "z_step_gain", 0.6))  # 步長 = K * |誤差mm|
+        z_tol_mm = float(self.Subscriber.z_tolerance_mm)
+
+        Z_STEP_MIN = float(self.Subscriber.z_step_min_mm)
+        Z_STEP_MAX = float(self.Subscriber.z_step_max_mm)
+        Z_K = float(self.Subscriber.z_step_gain)
+
+        TARGET_TOL_MM = 5.0  # 實際位置與目標位置的±誤差允許
 
         while time.time() - start < timeout:
             self.SpinOnce()
@@ -331,74 +320,70 @@ class Action():
                 rospy.sleep(0.2)
                 continue
 
-            fruit_z = float(self.marker_2d_pose_z)          # m（向上為正）
-            cur_h = float(st.height1)                      # mm
-            conf = self.TFConfidence()
-            if conf is None or conf < 0.5:
-                rospy.logwarn("Z: 信心指數不足，暫停調整")
-                rospy.sleep(0.5)
-                continue
-
-            # 在允許帶內 → 完成
-            if lower_z <= fruit_z <= upper_z:
-                rospy.loginfo(f"Z: cur={cur_h:.0f}mm, tgt=IN-BAND({lower_z:.3f}~{upper_z:.3f}m)")
-                return True
-
-            # 計算與允許帶的最近距離（m）
-            if fruit_z < lower_z:
-                err_m = (lower_z - fruit_z)   # 太高 → 要下降 (高度減少)
-                direction = -1
-            else:
-                err_m = (fruit_z - upper_z)   # 太低 → 要上升 (高度增加)
-                direction = +1
-
-            step = self._mm_step(err_m, Z_STEP_MIN, Z_STEP_MAX, Z_K)
-            tgt_h = max(Z_MIN, min(Z_MAX, cur_h + direction * step))
-
-            rospy.loginfo(f"Z: cur={cur_h:.0f}mm, tgt={tgt_h:.0f}mm")
-            if abs(tgt_h - cur_h) <= tolerance:
-                # 微小變化不下發，避免抖動
+            if not self.TFConfidence():
+                rospy.logwarn("Z: TF Confidence low")
                 rospy.sleep(0.2)
                 continue
 
-            self.cmd_vel.fnClawUpDown(int(tgt_h))
+            # 當前高度（mm）
+            cur_h = float(st.height1 if self.Subscriber.arm_ID == 1 else st.height2)
 
-            # 等待到位/收斂
-            reach_t0 = time.time()
-            while time.time() - reach_t0 < 3.0:
-                self.SpinOnce()
-                st2 = self.Subscriber.current_arm_status
-                if st2 is None:
-                    break
-                cur_h2 = float(st2.height1)
-                if abs(cur_h2 - tgt_h) <= tolerance:
-                    break
-                rospy.sleep(0.1)
+            # 相對位移 (m → mm)
+            rel_z_mm = float(self.marker_2d_pose_z) * 1000.0
 
-            rospy.sleep(0.2)
+            # 1) 成功條件
+            if abs(rel_z_mm) <= z_tol_mm:
+                rospy.loginfo(f"[Z] SUCCESS rel_z={rel_z_mm:.1f}mm (tol={z_tol_mm}mm)")
+                return True
 
-        rospy.logwarn("Z: 超時未達標")
+            # 計算目標高度（絕對高度）
+            tgt_h = max(Z_MIN, min(Z_MAX, cur_h + rel_z_mm))
+
+            # 與目標差距
+            err_mm = tgt_h - cur_h
+
+            # 若已在 ±5mm 內 → 視為停止
+            if abs(err_mm) <= TARGET_TOL_MM:
+                rospy.loginfo(f"[Z] REACH cur={cur_h:.1f} tgt={tgt_h:.1f}")
+                return True
+
+            # 動態步長
+            step = self._mm_step(err_mm / 1000.0, Z_STEP_MIN, Z_STEP_MAX, Z_K)
+            cmd_h = cur_h + (step if err_mm > 0 else -step)
+            cmd_h = max(Z_MIN, min(Z_MAX, cmd_h))
+
+            # rospy.loginfo(f"[Z] cur={cur_h:.1f} rel={rel_z_mm:.1f} tgt={tgt_h:.1f} cmd={cmd_h:.1f}")
+
+            self.cmd_vel.fnClawUpDown(int(cmd_h))
+            rospy.sleep(0.15)
+
+        rospy.logwarn("Z: 超時")
         return False
+
 
     def fnControlArmBasedOnFruitX(self, timeout=10.0):
         """
-        只保留：現在長度 / 目標長度 / 異常訊息。
-        絕對長度控制；距離越近步距越小。達標條件：fruit_x <= target_x + x_tol。
-        fruit_x > target_x → 前伸；fruit_x < target_x → 允許時後退。
+        |relative_x_mm| ≤ x_tolerance_mm → 成功
+        若距離相機太近 (marker_2d_pose_x <= x_stop_m)：
+        → 停止視覺對位，return True
         """
         start = time.time()
 
-        # 參數
-        target_x_m = float(self.Subscriber.cut_pliers_target_x)        # m
-        x_tol_m = float(self.Subscriber.x_tolerance_m)  # m
         L_MIN = float(self.Subscriber.cut_pliers_min_length)
         L_MAX = float(self.Subscriber.cut_pliers_max_length)
-        allow_retract= bool(self.Subscriber.cut_pliers_allow_retract)
 
-        # 自動步長（mm）範圍與斜率
+        x_tol_mm = float(self.Subscriber.x_tolerance_mm)
+
         X_STEP_MIN = float(self.Subscriber.x_step_min_mm)
         X_STEP_MAX = float(self.Subscriber.x_step_max_mm)
         X_K = float(self.Subscriber.x_step_gain)
+
+        allow_retract = bool(self.Subscriber.cut_pliers_allow_retract)
+
+        TARGET_TOL_MM = 5.0  # 目標位置與實際位置的允許誤差 ±5 mm
+
+        # ⭐ 新增：太近會看不到的「安全停止距離」（單位 m）
+        x_stop_m = float(getattr(self.Subscriber, "x_cut_pliers_target", 0.25))
 
         if not hasattr(self, "last_valid_length"):
             self.last_valid_length = L_MIN
@@ -411,186 +396,135 @@ class Action():
                 rospy.sleep(0.2)
                 continue
 
-            fruit_x = float(self.marker_2d_pose_x)    # m（forward 為正）
-            cur_l = float(st.length1)               # mm
-            conf = self.TFConfidence()
-            if conf is None or conf < 0.5:
-                rospy.logwarn("X: 信心指數不足，暫停調整")
-                rospy.sleep(0.5)
+            if not self.TFConfidence():
+                rospy.logwarn("X: TF Confidence low")
+                rospy.sleep(0.2)
                 continue
 
-            # 失真/回退防呆
-            if cur_l <= 0:
-                cur_l = self.last_valid_length
-            else:
-                self.last_valid_length = max(self.last_valid_length, cur_l)
+            cur_l = float(st.length1 if self.Subscriber.arm_ID == 1 else st.length2)
 
-            # 達標（含容差）
-            if fruit_x <= (target_x_m + x_tol_m):
-                rospy.loginfo(f"X: cur={cur_l:.0f}mm, tgt=MEET({target_x_m:.3f}m±{x_tol_m:.3f})")
+            fruit_x_m  = float(self.marker_2d_pose_x)       # m（forward 為正）
+            fruit_x_mm = fruit_x_m * 1000.0                # 轉成 mm
+
+            # 1) 已經在允許誤差範圍內 → 視為完成
+            if abs(fruit_x_mm) <= x_tol_mm:
+                rospy.loginfo(f"[X] SUCCESS rel_x={fruit_x_mm:.1f}mm (tol={x_tol_mm}mm)")
                 return True
 
-            # 誤差與方向
-            err_m = fruit_x - target_x_m
-            if err_m > 0:          # 太遠 → 前伸
-                direction = +1
-            else:                  # 太近 → 後退（需允許）
-                if not allow_retract:
-                    rospy.logwarn("X: 過近且不允許後退，停止調整")
-                    return True
-                direction = -1
+            # 2) 還是正值但太近，停止視覺對位
+            if fruit_x_m <= x_stop_m:
+                rospy.loginfo(f"[X] Too close to camera (rel_x={fruit_x_m:.3f}m ≤ {x_stop_m}m) 停止視覺對位")
+                return True
 
-            step = self._mm_step(err_m, X_STEP_MIN, X_STEP_MAX, X_K)
+            # 3) 物體相對距離變成負的（已經超過目標、在相機後面），且不允許後退 → 直接結束
+            if fruit_x_mm < 0 and not allow_retract:
+                rospy.logwarn("[X] Too close (rel_x<0) & no retract allowed → 視為 OK，停止視覺對位")
+                return True
+
+            # --- 正常情況：還在可觀測距離內，繼續用視覺往前/往後調 ---
+            err_mm = fruit_x_mm
+            step = self._mm_step(err_mm / 1000.0, X_STEP_MIN, X_STEP_MAX, X_K)
+            direction = 1 if err_mm > 0 else -1
             tgt_l = max(L_MIN, min(L_MAX, cur_l + direction * step))
 
-            rospy.loginfo(f"X: cur={cur_l:.0f}mm, tgt={tgt_l:.0f}mm")
+            # 如果這一步變化太小（≤5mm），也直接認為到位
+            if abs(tgt_l - cur_l) <= TARGET_TOL_MM:
+                rospy.loginfo(f"[X] REACH cur={cur_l:.1f} tgt={tgt_l:.1f}")
+                return True
+
+            # rospy.loginfo(f"[X] cur={cur_l:.1f} rel_x={fruit_x_mm:.1f}mm tgt={tgt_l:.1f}mm")
+
             if direction > 0:
                 self.cmd_vel.fnClawForward(int(tgt_l))
             else:
                 self.cmd_vel.fnClawBackward(int(tgt_l))
 
-            # 到位等候
-            reach_t0 = time.time()
-            while time.time() - reach_t0 < 3.0:
-                self.SpinOnce()
-                st2 = self.Subscriber.current_arm_status
-                if st2 is None:
-                    break
-                cur_l2 = float(st2.length1)
-                if cur_l2 <= 0:
-                    cur_l2 = self.last_valid_length
-                else:
-                    self.last_valid_length = max(self.last_valid_length, cur_l2)
-                if abs(cur_l2 - tgt_l) <= 10.0:
-                    break
-                rospy.sleep(0.1)
+            rospy.sleep(0.15)
 
-            rospy.sleep(0.2)
-
-        rospy.logwarn("X: 超時未達標")
+        rospy.logwarn("X: 超時")
         return False
 
-    def ClawAlignZX(self, z_tolerance=3, x_tolerance=3):
-        """
-        以固定速硬體對齊 ZX（全部 mm 單位）：
-        - 相機給的是「相對位移」(Δz, Δx)；馬達命令為「絕對位置」
-        => 目標絕對 = 目前位置 + 相對位移(公尺→mm)
-        - anti-overshoot：前視量(lead) + 單步上限(step cap)
-        - hysteresis：連續 N 次在容差內才判定完成
-        """
-
-        # 讀感測
-        self.SpinOnce()
-        if not self.TFConfidence():
-            rospy.logwarn("TF confidence is low, cannot align claw.")
-            return False
-        if self.current_arm_status is None:
-            rospy.logwarn("尚未接收到手臂狀態，等待中...")
-            return False
-
-        # 相機位移(相對) 由 m 轉 mm（維持你在 cbGetObject 的軸向：forward=+pz、up=-py）
-        scale = float(getattr(self.Subscriber, "marker_to_mm", 1000.0))
-        rel_z_mm = float(self.marker_2d_pose_z) * scale   # Δz (mm), 上為正
-        rel_x_mm = float(self.marker_2d_pose_x) * scale   # Δx (mm), 前為正
-
-        # 目前（arm 回報單位即 mm）
-        if self.Subscriber.arm_ID == 1:
-            current_z_mm = float(self.current_arm_status.height1)
-            current_x_mm = float(self.current_arm_status.length1)
-        else:
-            current_z_mm = float(self.current_arm_status.height2)
-            current_x_mm = float(self.current_arm_status.length2)
-
-        # 目標絕對位置 = 目前 + 相對位移
-        target_z_mm = current_z_mm + rel_z_mm
-        target_x_mm = current_x_mm + rel_x_mm
-
-        dz = target_z_mm - current_z_mm    # = rel_z_mm
-        dx = target_x_mm - current_x_mm    # = rel_x_mm
-
-        # 連續命中判定（抑制邊界抖動）
-        if not hasattr(self, "_zx_stable_cnt"):
-            self._zx_stable_cnt = 0
-        STABLE_N = int(getattr(self.Subscriber, "zx_stable_frames", 5))
-
-        in_z = abs(dz) <= z_tolerance
-        in_x = abs(dx) <= x_tolerance
-        if in_z and in_x:
-            self._zx_stable_cnt += 1
-            self.cmd_vel.fnStop()
-            self.cmd_vel.fnClawStop()
-            if self._zx_stable_cnt >= STABLE_N:
-                self._zx_stable_cnt = 0
-                return True
-            return False
-        else:
-            self._zx_stable_cnt = 0
-
-        # 參數（mm）
-        Z_LEAD_NEAR = float(getattr(self.Subscriber, "z_lead_near_mm", 6.0))
-        Z_LEAD_FAR = float(getattr(self.Subscriber, "z_lead_far_mm", 12.0))
-        Z_SWITCH = float(getattr(self.Subscriber, "z_lead_switch_mm", 25.0))
-        Z_STEP_MAX = float(getattr(self.Subscriber, "z_step_max_mm", 30.0))
-        Z_MIN = float(getattr(self.Subscriber, "cut_pliers_min_height", 0.0))
-        Z_MAX = float(getattr(self.Subscriber, "cut_pliers_max_height", 280.0))
-
-        X_LEAD_NEAR = float(getattr(self.Subscriber, "x_lead_near_mm", 10.0))
-        X_LEAD_FAR = float(getattr(self.Subscriber, "x_lead_far_mm", 20.0))
-        X_SWITCH = float(getattr(self.Subscriber, "x_lead_switch_mm", 40.0))
-        X_STEP_MAX = float(getattr(self.Subscriber, "x_step_max_mm", 50.0))
-        X_MIN = 10.0
-        X_MAX = float(getattr(self.Subscriber, "cut_pliers_max_length", 440.0))
-
-        def _clip(v, lo, hi): return max(lo, min(hi, v))
-        def _sgn(v): return 1.0 if v >= 0.0 else -1.0
-
-        # Z：預停 + 限步（mm）— 用「目標絕對」做預停
-        if not in_z:
-            z_lead = Z_LEAD_FAR if abs(dz) > Z_SWITCH else Z_LEAD_NEAR
-            # 往目標方向提前預停 z_pre（仍是絕對座標）
-            z_pre = _clip(target_z_mm - _sgn(dz) * z_lead, Z_MIN, Z_MAX)
-            z_to_pre = z_pre - current_z_mm
-            z_delta = dz if abs(dz) < abs(z_to_pre) else z_to_pre
-            z_step_target = _clip(current_z_mm + _clip(z_delta, -Z_STEP_MAX, Z_STEP_MAX), Z_MIN, Z_MAX)
-            rospy.loginfo(f"ClawAlignZX[Z]: rel={rel_z_mm:.1f}, target={target_z_mm:.1f}, current={current_z_mm:.1f}, dz={dz:.1f}, z_pre={z_pre:.1f}, z_to_pre={z_to_pre:.1f}, step_target={z_step_target:.1f}")
-            self.cmd_vel.fnClawUpDown(int(round(z_step_target)))
-
-        # X：預停 + 限步（mm）— 同上
-        if not in_x:
-            x_lead = X_LEAD_FAR if abs(dx) > X_SWITCH else X_LEAD_NEAR
-            x_pre = _clip(target_x_mm - _sgn(dx) * x_lead, X_MIN, X_MAX)
-            x_to_pre = x_pre - current_x_mm
-            x_delta = dx if abs(dx) < abs(x_to_pre) else x_to_pre
-            x_step_target = _clip(current_x_mm + _clip(x_delta, -X_STEP_MAX, X_STEP_MAX), X_MIN, X_MAX)
-            rospy.loginfo(f"ClawAlignZX[X]: rel={rel_x_mm:.1f}, target={target_x_mm:.1f}, current={current_x_mm:.1f}, dx={dx:.1f}, x_pre={x_pre:.1f}, x_to_pre={x_to_pre:.1f}, step_target={x_step_target:.1f}")
-            if x_step_target >= current_x_mm:
-                self.cmd_vel.fnClawForward(int(round(x_step_target)))
-            else:
-                self.cmd_vel.fnClawBackward(int(round(x_step_target)))
-
-        return False
     
     def DeadMoveZ(self, target_z, z_tolerance=3):  # 盲走Z（固定速）
-        if self.current_arm_status is None:
+        st = self.Subscriber.current_arm_status
+        if st is None:
             rospy.logwarn("尚未接收到手臂狀態，等待中...")
             return False
 
-        current_z = self.current_arm_status.height1 if self.Subscriber.arm_ID == 1 else self.current_arm_status.height2
+        current_z = st.height1 if self.Subscriber.arm_ID == 1 else st.height2
         dz = target_z - current_z
+        # rospy.loginfo(f'Current Z: {current_z}, Target Z: {target_z}, Delta Z: {dz}')
         if abs(dz) <= z_tolerance:
             self.cmd_vel.fnClawStop()
             return True
 
         self.cmd_vel.fnClawUpDown(int(target_z))
         return False
+    
+    def DeadMoveZRel(self, delta_z):
+        """計算 target，不送命令"""
+        st = self.Subscriber.current_arm_status
+        if st is None:
+            return None
+        current_z = st.height1 if self.Subscriber.arm_ID == 1 else st.height2
+        return current_z + float(delta_z)
+    
+    def fnBlindExtendArm(self, timeout=7.0):
+        """
+        盲伸（相機停止後的小幅度前伸）：
+        - 基於目前長度 + blind_extend_length
+        - 使用 DeadMoveX() 方式前伸，保持高度不變
+        """
 
-    def DeadMoveX(self, target_x, x_tolerance=3):  # 盲走X（固定速）
-        if self.current_arm_status is None:
+        # 防重複執行
+        if hasattr(self, "blind_extend_completed") and self.blind_extend_completed:
+            rospy.logwarn("⚠ `fnBlindExtendArm()` 已執行過，跳過此次呼叫")
+            return True
+
+        st = self.Subscriber.current_arm_status
+        if st is None:
+            rospy.logerr("無法獲取手臂狀態")
+            return False
+
+        # 取得目前長度
+        if self.Subscriber.arm_ID == 1:
+            cur_l = st.length1
+        else:
+            cur_l = st.length2
+
+        if cur_l is None or cur_l <= 0:
+            rospy.logerr("當前長度無效，盲伸中止")
+            return False
+
+        extra = float(self.Subscriber.cut_pliers_blind_extend_length)
+        tgt_l = min(cur_l + extra, float(self.Subscriber.cut_pliers_max_length))
+
+        # rospy.loginfo(f"BlindExtend: cur={cur_l:.1f}mm, extra={extra:.1f} → target={tgt_l:.1f}mm")
+
+        # 使用 DeadMoveX 盲走
+        start = time.time()
+        while time.time() - start < timeout:
+            done = self.DeadMoveX(target_x=tgt_l, x_tolerance=5.0)
+            if done:
+                rospy.loginfo(f"盲伸完成：到達 {tgt_l:.1f} mm")
+                self.blind_extend_completed = True
+                return True
+
+            rospy.sleep(0.1)
+
+        rospy.logerr(f"盲伸超時 (tgt={tgt_l:.1f}mm)")
+        return False
+
+    def DeadMoveX(self, target_x, x_tolerance=5.0):
+        st = self.Subscriber.current_arm_status
+        if st is None:
             rospy.logwarn("尚未接收到手臂狀態，等待中...")
             return False
 
-        current_x = self.current_arm_status.length1 if self.Subscriber.arm_ID == 1 else self.current_arm_status.length2
+        current_x = st.length1 if self.Subscriber.arm_ID == 1 else st.length2
         dx = target_x - current_x
+        # rospy.loginfo(f"[DeadMoveX] cur={current_x:.1f}mm, tgt={target_x:.1f}mm, dx={dx:.1f}mm, tol={x_tolerance:.1f}mm")
+
         if abs(dx) <= x_tolerance:
             self.cmd_vel.fnClawStop()
             return True
@@ -600,48 +534,79 @@ class Action():
         else:
             self.cmd_vel.fnClawBackward(int(target_x))
         return False
+    
+    def DeadMoveXRel(self, delta_x):
+        """計算 target，不送命令"""
+        st = self.Subscriber.current_arm_status
+        if st is None:
+            return None
+        current_x = st.length1 if self.Subscriber.arm_ID == 1 else st.length2
+        # rospy.loginfo(f'Current X: {current_x}, Delta X: {delta_x}')
+        return current_x + float(delta_x)
 
-    def fnControlClaw(self, claw_state, timeout=3):
+    def fnControlClaw(self, claw_state, timeout=5.0):
+        """
+        控制剪鉗開/關（阻塞直到到達目標或 timeout）。
+        claw_state: 1/True = 打開, 0/False = 關閉。
+        """
         start_time = time.time()
+        want_close = bool(claw_state)      # True=開、False=關
+        target_open = (not want_close)     # CmdCutPliers.clawX → True=打開（依你 fnClawSet 的命名）
 
-        # 確保 claw_state 為 bool
-        claw_state = bool(claw_state)
-
-        # 等待初始手臂狀態
-        while self.current_arm_status is None and time.time() - start_time < 1.0:
+        # 等待 arm status 初始化
+        while self.Subscriber.current_arm_status is None and time.time() - start_time < 1.0:
             rospy.logwarn("等待手臂狀態初始化...")
-            rospy.sleep(0.1)
-        if self.current_arm_status is None:
-            rospy.logerr("❌ 未接收到手臂狀態，無法控制剪鉗")
+            rospy.sleep(0.05)
+
+        if self.Subscriber.current_arm_status is None:
+            rospy.logerr("未接收到手臂狀態，無法控制剪鉗")
             return False
 
-        # 發送剪鉗控制指令
-        if self.Subscriber.arm_ID == 1:
-            claw_state = self.current_arm_status.claw1 if claw_state else not self.current_arm_status.claw1
-        elif self.Subscriber.arm_ID == 2:
-            claw_state = self.current_arm_status.claw2 if claw_state else not self.current_arm_status.claw2
+        def get_cur_open():
+            st = self.Subscriber.current_arm_status
+            if st is None:
+                return None
+            if self.Subscriber.arm_ID == 1:
+                return st.claw1
+            else:
+                return st.claw2
 
-        # 等待剪鉗狀態變更
+        last_send = 0.0
+        send_interval = 0.2  # 5 Hz 重送一次命令
+
         while time.time() - start_time < timeout:
-            self.SpinOnce()  # 處理 ROS 回傳的狀態
-            if self.current_arm_status.claw1 == claw_state:
-                if claw_state:  # 閉合
-                    rospy.loginfo(f"✅ 剪鉗閉合成功，等待2秒以穩定狀態...")
-                    rospy.sleep(5)  # 閉合後等待2秒
-                else:  # 打開
-                    rospy.loginfo(f"✅ 剪鉗打開成功，等待10秒以穩定狀態...")
-                    rospy.sleep(25)  # 打開後等待10秒
+            now = time.time()
+            # 週期性送開/關命令
+            if now - last_send > send_interval:
+                self.cmd_vel.fnClawSet(open_=target_open)
+                last_send = now
+                if want_close:
+                    rospy.loginfo("➡ 送出開剪鉗命令")
+                else:
+                    rospy.loginfo("➡ 送出關剪鉗命令")
+
+            cur_open = get_cur_open()
+            if cur_open is not None and cur_open == target_open:
+                if want_close:
+                    rospy.loginfo("剪鉗打開完成")
+                else:
+                    rospy.loginfo("剪鉗閉合完成")
+                self.cmd_vel.fnClawStop()
                 return True
-            rospy.logwarn(f"⏳ 剪鉗動作中... 目標: {claw_state}, 當前: {self.current_arm_status.claw1}")
-            rospy.sleep(0.1)
-        
-        rospy.logerr(f"⏰ 剪鉗動作超時: 目標 {claw_state}, 當前: {self.current_arm_status.claw1}")
+
+            rospy.sleep(0.05)
+
+        rospy.logerr("剪鉗動作超時，無法確認到達目標狀態")
+        self.cmd_vel.fnClawStop()
         return False
     
     def TFConfidence(self):#判斷TF是否可信
         # rospy.loginfo('shelf_detection: {0}'.format(self.Subscriber.sub_detectionConfidence.shelf_detection))
         # rospy.loginfo('shelf_confidence: {0}'.format(self.Subscriber.sub_detectionConfidence.shelf_confidence))
         # rospy.loginfo('confidence_minimum: {0}'.format(self.Subscriber.confidence_minimum))
+        # if (not self.Subscriber.sub_detectionConfidence.pose_detection) or self.Subscriber.sub_detectionConfidence.pose_confidence < self.Subscriber.confidence_minimum:
+        #     self.cmd_vel.fnStop()
+        #     return False
         if (not self.Subscriber.sub_detectionConfidence.pose_detection) or self.Subscriber.sub_detectionConfidence.pose_confidence < self.Subscriber.confidence_minimum:
             self.cmd_vel.fnStop()
             return False
@@ -653,6 +618,14 @@ class cmd_vel():
         self.pub_cmd_vel = self.Subscriber.pub_cmd_vel
         self.arm_pub_cmd_vel = self.Subscriber.arm_control_pub
         self.front = False
+
+        Z_MIN = float(self.Subscriber.cut_pliers_min_height)
+        L_MIN = float(self.Subscriber.cut_pliers_min_length)
+
+        self.target_h_mm = Z_MIN      # 目標高度
+        self.target_l_mm = L_MIN      # 目標長度
+        self.target_claw = False      # 目標夾爪狀態
+        self._target_inited = False   # 是否已經從狀態初始化過
 
     def cmd_pub(self, twist):
         if not self.front:
@@ -734,122 +707,143 @@ class cmd_vel():
     def _saturate(self, v, lo, hi):
         return max(lo, min(hi, v))
     
-    def _get_current_hl(self):
-        """讀目前高度/長度；若尚未有回報，用參數下限做保底。"""
+    def _init_targets_from_status_once(self):
+        """
+        第一次使用時，從 current_arm_status 把實際位置抄成目標值，
+        之後就都用 target_h_mm / target_l_mm 自己維護。
+        """
+        if self._target_inited:
+            return
+
         Z_MIN = float(self.Subscriber.cut_pliers_min_height)
         Z_MAX = float(self.Subscriber.cut_pliers_max_height)
         L_MIN = float(self.Subscriber.cut_pliers_min_length)
         L_MAX = float(self.Subscriber.cut_pliers_max_length)
 
-        h_cur, l_cur = Z_MIN, L_MIN
         st = getattr(self.Subscriber, "current_arm_status", None)
         if st is not None:
             if self.Subscriber.arm_ID == 1:
-                h_cur = float(getattr(st, "height1", Z_MIN))
-                l_cur = float(getattr(st, "length1", L_MIN))
-                claw_cur = getattr(st, "claw1", False)
+                h = float(getattr(st, "height1", Z_MIN))
+                l = float(getattr(st, "length1", L_MIN))
+                claw = bool(getattr(st, "claw1", False))
             else:
-                h_cur = float(getattr(st, "height2", Z_MIN))
-                l_cur = float(getattr(st, "length2", L_MIN))
-                claw_cur = getattr(st, "claw2", False)
+                h = float(getattr(st, "height2", Z_MIN))
+                l = float(getattr(st, "length2", L_MIN))
+                claw = bool(getattr(st, "claw2", False))
+        else:
+            h, l, claw = Z_MIN, L_MIN, False
 
-        h_cur = self._saturate(h_cur if h_cur > 0 else Z_MIN, Z_MIN, Z_MAX)
-        l_cur = self._saturate(l_cur if l_cur > 0 else L_MIN, L_MIN, L_MAX)
-        return int(round(h_cur)), int(round(l_cur)), claw_cur
-    
+        self.target_h_mm = self._saturate(h if h > 0 else Z_MIN, Z_MIN, Z_MAX)
+        self.target_l_mm = self._saturate(l if l > 0 else L_MIN, L_MIN, L_MAX)
+        self.target_claw = claw
+        self._target_inited = True
+
     def fnClawSet(self, open_: bool):
-        """只改夾爪，其他軸帶目前值（絕對位置控制避免 0）。"""
-        h_cur, l_cur, claw_cur = self._get_current_hl()
+        """
+        只改夾爪目標，其餘高度/長度用目前 target_*。
+        """
+        self._init_targets_from_status_once()
+
+        self.target_claw = bool(open_)
+
         msg = CmdCutPliers()
         if self.Subscriber.arm_ID == 1:
-            msg.height1 = h_cur
-            msg.length1 = l_cur
-            msg.claw1 = bool(open_)
+            msg.height1 = int(round(self.target_h_mm))
+            msg.length1 = int(round(self.target_l_mm))
+            msg.claw1 = self.target_claw
         else:
-            msg.height2 = h_cur
-            msg.length2 = l_cur
-            msg.claw2 = bool(open_)
-        self.arm_pub_cmd_vel.publish(msg)
-    
-    def _fill_claw(self, msg, claw_cur):
-        """把目前爪子狀態（若有）放進訊息裡，避免意外改變爪子。"""
-        if claw_cur is None:
-            # 讀不到就維持既有；某些韌體會忽略未設定欄位
-            return
-        if self.Subscriber.arm_ID == 1:
-            msg.claw1 = bool(claw_cur)
-            msg.claw2 = False
-        else:
-            msg.claw1 = False
-            msg.claw2 = bool(claw_cur)
+            msg.height2 = int(round(self.target_h_mm))
+            msg.length2 = int(round(self.target_l_mm))
+            msg.claw2 = self.target_claw
+
+        self.arm_cmd_pub(msg)
 
     def fnClawUpDown(self, target_mm):
-        """絕對高度：同時帶入目前長度，避免另一軸送 0。"""
+        """
+        絕對高度：只更新 target_h_mm，長度用 target_l_mm，不跟著實際回報抖動。
+        """
+        self._init_targets_from_status_once()
+
         Z_MIN = float(self.Subscriber.cut_pliers_min_height)
         Z_MAX = float(self.Subscriber.cut_pliers_max_height)
 
-        h_cur, l_cur, claw_cur = self._get_current_hl()
-        target_h = int(round(self._saturate(float(target_mm), Z_MIN, Z_MAX)))
-        target_l = int(round(l_cur))  # 未改動，帶目前值
+        self.target_h_mm = self._saturate(float(target_mm), Z_MIN, Z_MAX)
 
         msg = CmdCutPliers()
-        # 長度也要一併填入目前值（避免 0）
         if self.Subscriber.arm_ID == 1:
-            msg.height1 = target_h
-            msg.length1 = target_l
+            msg.height1 = int(round(self.target_h_mm))
+            msg.length1 = int(round(self.target_l_mm))
+            msg.claw1 = self.target_claw
         else:
-            msg.height2 = target_h
-            msg.length2 = target_l
+            msg.height2 = int(round(self.target_h_mm))
+            msg.length2 = int(round(self.target_l_mm))
+            msg.claw2 = self.target_claw
 
-        self._fill_claw(msg, claw_cur)
-        self.arm_pub_cmd_vel.publish(msg)
+        self.arm_cmd_pub(msg)
 
     def fnClawForward(self, target_mm):
-        """絕對長度前伸：同時帶入目前高度，並設定 mode=0。"""
-        Z_MIN = float(self.Subscriber.cut_pliers_min_height)
-        Z_MAX = float(self.Subscriber.cut_pliers_max_height)
+        """
+        絕對長度前伸：只更新 target_l_mm，height 用 target_h_mm。
+        mode=0 (前進)
+        """
+        self._init_targets_from_status_once()
+
         L_MIN = float(self.Subscriber.cut_pliers_min_length)
         L_MAX = float(self.Subscriber.cut_pliers_max_length)
 
-        h_cur, l_cur, claw_cur = self._get_current_hl()
-        target_l = int(round(self._saturate(abs(float(target_mm)), L_MIN, L_MAX)))
-        keep_h   = int(round(self._saturate(h_cur, Z_MIN, Z_MAX)))
+        self.target_l_mm = self._saturate(abs(float(target_mm)), L_MIN, L_MAX)
 
         msg = CmdCutPliers()
         msg.mode = 0  # forward
         if self.Subscriber.arm_ID == 1:
-            msg.length1 = target_l
-            msg.height1 = keep_h
+            msg.length1 = int(round(self.target_l_mm))
+            msg.height1 = int(round(self.target_h_mm))
+            msg.claw1 = self.target_claw
         else:
-            msg.length2 = target_l
-            msg.height2 = keep_h
+            msg.length2 = int(round(self.target_l_mm))
+            msg.height2 = int(round(self.target_h_mm))
+            msg.claw2 = self.target_claw
 
-        self._fill_claw(msg, claw_cur)
-        self.arm_pub_cmd_vel.publish(msg)
+        self.arm_cmd_pub(msg)
 
     def fnClawBackward(self, target_mm):
-        """絕對長度後退：同時帶入目前高度，並設定 mode=1。"""
-        Z_MIN = float(self.Subscriber.cut_pliers_min_height)
-        Z_MAX = float(self.Subscriber.cut_pliers_max_height)
+        """
+        絕對長度後退：只更新 target_l_mm，height 用 target_h_mm。
+        mode=1 (後退)
+        """
+        self._init_targets_from_status_once()
+
         L_MIN = float(self.Subscriber.cut_pliers_min_length)
         L_MAX = float(self.Subscriber.cut_pliers_max_length)
 
-        h_cur, l_cur, claw_cur = self._get_current_hl()
-        target_l = int(round(self._saturate(abs(float(target_mm)), L_MIN, L_MAX)))
-        keep_h   = int(round(self._saturate(h_cur, Z_MIN, Z_MAX)))
+        self.target_l_mm = self._saturate(abs(float(target_mm)), L_MIN, L_MAX)
 
         msg = CmdCutPliers()
         msg.mode = 1  # backward
         if self.Subscriber.arm_ID == 1:
-            msg.length1 = target_l
-            msg.height1 = keep_h
+            msg.length1 = int(round(self.target_l_mm))
+            msg.height1 = int(round(self.target_h_mm))
+            msg.claw1 = self.target_claw
         else:
-            msg.length2 = target_l
-            msg.height2 = keep_h
+            msg.length2 = int(round(self.target_l_mm))
+            msg.height2 = int(round(self.target_h_mm))
+            msg.claw2 = self.target_claw
 
-        self._fill_claw(msg, claw_cur)
-        self.arm_pub_cmd_vel.publish(msg)
+        self.arm_cmd_pub(msg)
 
     def fnClawStop(self):
+        """
+        停止：只重新發一次「目前 target_* 狀態」，不送 0。
+        """
+        self._init_targets_from_status_once()
         msg = CmdCutPliers()
+        if self.Subscriber.arm_ID == 1:
+            msg.height1 = int(round(self.target_h_mm))
+            msg.length1 = int(round(self.target_l_mm))
+            msg.claw1 = self.target_claw
+        else:
+            msg.height2 = int(round(self.target_h_mm))
+            msg.length2 = int(round(self.target_l_mm))
+            msg.claw2 = self.target_claw
+
         self.arm_cmd_pub(msg)

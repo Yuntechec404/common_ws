@@ -9,11 +9,15 @@ ParkingCameraSequence = Enum( 'ParkingCameraSequence', \
                     move_nearby_parking_lot \
                     parking \
                     decide \
-                    cut_pliers_align_ZX \
+                    cut_pliers_align_Z \
+                    cut_pliers_align_X \
                     cut_pliers_dead_reckoning_up \
                     cut_pliers_dead_reckoning_down \
                     cut_pliers_dead_reckoning_extend \
-                    cut_pliers_dead_reckoning_retract \
+                    cut_pliers_dead_reckoning \
+                    cut_pliers_home_length \
+                    cut_pliers_home_height \
+                    cut_pliers_down \
                     close_pliers \
                     open_pliers \
                     stop \
@@ -64,7 +68,7 @@ class PBVS():
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingCameraSequence.parking.value):
                 self.subscriber.fnDetectionAllowed(True, self.layer_dist)  # fnDetectionAllowed(self, pose_detection, layer)
-                self.is_sequence_finished = self.Action.fnSeqParking(self.subscriber.camera_horizon_alignment_threshold, 0.2)
+                self.is_sequence_finished = self.Action.fnSeqParking(self.subscriber.camera_horizon_alignment_threshold, 0.1)
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingCameraSequence.decide.value
@@ -73,7 +77,7 @@ class PBVS():
                 ok_all, dist_ok = self.Action.fnSeqdecide(self.subscriber.camera_desired_dist_threshold, self.subscriber.camera_horizon_alignment_threshold )
                 
                 if ok_all == True:
-                    current_sequence = ParkingCameraSequence.cut_pliers_align_ZX.value
+                    current_sequence = ParkingCameraSequence.cut_pliers_align_Z.value
                     self.is_sequence_finished = False
                     ok_all = False
                 else:
@@ -82,37 +86,62 @@ class PBVS():
                     dist_ok = False
                     ok_all = False
 
-            elif(current_sequence == ParkingCameraSequence.cut_pliers_align_ZX.value):
+            elif(current_sequence == ParkingCameraSequence.cut_pliers_align_Z.value):
                 # self.is_sequence_finished = self.Action.ClawAlignZX()
                 self.is_sequence_finished = self.Action.fnControlArmBasedOnFruitZ()
                 if self.is_sequence_finished:
-                    current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning_extend.value  
+                    current_sequence = ParkingCameraSequence.cut_pliers_align_X.value  
                     self.is_sequence_finished = False  
 
-            elif(current_sequence == ParkingCameraSequence.cut_pliers_dead_reckoning_extend.value):
-                # self.is_sequence_finished = self.Action.DeadMoveX(self.subscriber.cut_pliers_blind_extend_length, speed_k=0.5)
+            elif(current_sequence == ParkingCameraSequence.cut_pliers_align_X.value):
                 self.is_sequence_finished = self.Action.fnControlArmBasedOnFruitX()
                 if self.is_sequence_finished:
-                    current_sequence = ParkingCameraSequence.stop.value  
+                    current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning.value  
                     self.is_sequence_finished = False  
 
-            # elif(current_sequence == ParkingCameraSequence.close_pliers.value):
-            #     self.is_sequence_finished = self.Action.fnControlClaw(1)  # 關閉剪鉗
-            #     if self.is_sequence_finished:
-            #         current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning_up.value  
-            #         self.is_sequence_finished = False
+            elif current_sequence == ParkingCameraSequence.cut_pliers_dead_reckoning.value:
+                self.subscriber.fnDetectionAllowed(False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
+                self.is_sequence_finished = self.Action.fnBlindExtendArm()
+                if self.is_sequence_finished:
+                    current_sequence = ParkingCameraSequence.close_pliers.value
+                    self.is_sequence_finished = False
 
-            # elif(current_sequence == ParkingCameraSequence.cut_pliers_dead_reckoning_up.value):
-            #     self.is_sequence_finished = self.Action.DeadMoveZ(target_z=120, speed_k=0.5)
-            #     if self.is_sequence_finished:
-            #         current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning_retract.value  
-            #         self.is_sequence_finished = False
+            elif(current_sequence == ParkingCameraSequence.close_pliers.value):
+                self.is_sequence_finished = self.Action.fnControlClaw(0)  # 關閉剪鉗
+                if self.is_sequence_finished:
+                    current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning_up.value  
+                    self.is_sequence_finished = False
+
+            elif(current_sequence == ParkingCameraSequence.cut_pliers_dead_reckoning_up.value):
+                self.is_sequence_finished = self.Action.DeadMoveZ(120.0, z_tolerance=5.0)
+                if self.is_sequence_finished:
+                    current_sequence = ParkingCameraSequence.cut_pliers_home_length.value  
+                    self.is_sequence_finished = False
             
-            # elif(current_sequence == ParkingCameraSequence.cut_pliers_dead_reckoning_retract.value):
-            #     self.is_sequence_finished = self.Action.fnRetractArm()
-            #     if self.is_sequence_finished:
-            #         current_sequence = ParkingCameraSequence.cut_pliers_dead_reckoning_retract.value  
-            #         self.is_sequence_finished = False
+            elif(current_sequence == ParkingCameraSequence.cut_pliers_home_length.value):
+                self.is_sequence_finished = self.Action.DeadMoveX(self.subscriber.cut_pliers_home_length)
+                if self.is_sequence_finished:
+                    current_sequence = ParkingCameraSequence.cut_pliers_down.value  
+                    self.is_sequence_finished = False
+
+            elif(current_sequence == ParkingCameraSequence.cut_pliers_down.value):
+                self.is_sequence_finished = self.Action.DeadMoveZ(80.0, z_tolerance=5.0)
+                if self.is_sequence_finished:
+                    current_sequence = ParkingCameraSequence.open_pliers.value
+                    self.is_sequence_finished = False
+
+            elif(current_sequence == ParkingCameraSequence.open_pliers.value):
+                self.is_sequence_finished = self.Action.fnControlClaw(1)  # 剪鉗
+                if self.is_sequence_finished:
+                    current_sequence = ParkingCameraSequence.cut_pliers_home_height.value
+                    self.is_sequence_finished = False
+
+            elif(current_sequence == ParkingCameraSequence.cut_pliers_home_height.value):
+                self.is_sequence_finished = self.Action.DeadMoveZ(self.subscriber.cut_pliers_home_height, z_tolerance=7.0)
+                if self.is_sequence_finished:
+                    current_sequence = ParkingCameraSequence.stop.value
+                    self.is_sequence_finished = False
+
             elif(current_sequence == ParkingCameraSequence.stop.value):
                 self.subscriber.fnDetectionAllowed(False, self.layer_dist)  # fnDetectionAllowed(self, shelf_detection, pallet_detection, layer)
                 if self.check_wait_time > 15 :

@@ -5,8 +5,10 @@ import actionlib
 import tf
 from geometry_msgs.msg import Twist, Pose
 from nav_msgs.msg import Odometry
+import forklift_server.msg
 import math
-from forklift_msg.msg import Confidence, Detection
+from forklift_msg.msg import Detection
+from visp_megapose.msg import Confidence
 from cut_pliers_controller.msg import CmdCutPliers
 
 import sys
@@ -87,19 +89,21 @@ class Subscriber():
         self.cut_pliers_max_length = rospy.get_param(rospy.get_name() + "/cut_pliers_max_length", 440.0)
 
         # Z 允許帶 / 自適應步長
-        self.cut_pliers_lower_z = rospy.get_param(rospy.get_name() + "/cut_pliers_lower_z", 0.022)
-        self.cut_pliers_upper_z = rospy.get_param(rospy.get_name() + "/cut_pliers_upper_z", 0.028)
-        self.z_step_min_mm      = rospy.get_param(rospy.get_name() + "/z_step_min_mm", 3.0)
-        self.z_step_max_mm      = rospy.get_param(rospy.get_name() + "/z_step_max_mm", 20.0)
-        self.z_step_gain        = rospy.get_param(rospy.get_name() + "/z_step_gain", 0.7)
+        self.z_tolerance_mm = rospy.get_param(rospy.get_name() + "/z_tolerance_mm", 0.0)
+        self.z_step_min_mm = rospy.get_param(rospy.get_name() + "/z_step_min_mm", 3.0)
+        self.z_step_max_mm = rospy.get_param(rospy.get_name() + "/z_step_max_mm", 20.0)
+        self.z_step_gain = rospy.get_param(rospy.get_name() + "/z_step_gain", 0.7)
 
         # X 目標 / 自適應步長
-        self.cut_pliers_target_x    = rospy.get_param(rospy.get_name() + "/cut_pliers_target_x", 0.13)
-        self.x_step_min_mm          = rospy.get_param(rospy.get_name() + "/x_step_min_mm", 5.0)
-        self.x_step_max_mm          = rospy.get_param(rospy.get_name() + "/x_step_max_mm", 50.0)
-        self.x_step_gain            = rospy.get_param(rospy.get_name() + "/x_step_gain", 0.7)
+        self.x_tolerance_mm = rospy.get_param(rospy.get_name() + "/x_tolerance_mm", 0.0)
+        self.x_step_min_mm = rospy.get_param(rospy.get_name() + "/x_step_min_mm", 5.0)
+        self.x_step_max_mm = rospy.get_param(rospy.get_name() + "/x_step_max_mm", 50.0)
+        self.x_step_gain = rospy.get_param(rospy.get_name() + "/x_step_gain", 0.7)
         self.cut_pliers_allow_retract = rospy.get_param(rospy.get_name() + "/cut_pliers_allow_retract", True)
-        self.x_tolerance_m          = rospy.get_param(rospy.get_name() + "/x_tolerance_m", 0.005)
+        self.x_cut_pliers_target = rospy.get_param(rospy.get_name() + "/x_cut_pliers_target", 0.0)
+        self.cut_pliers_blind_extend_length = rospy.get_param(rospy.get_name() + "/cut_pliers_blind_extend_length", 0.0)
+        self.cut_pliers_home_length = rospy.get_param(rospy.get_name() + "/cut_pliers_home_length", 0.0)
+        self.cut_pliers_home_height = rospy.get_param(rospy.get_name() + "/cut_pliers_home_height", 0.0)
 
         rospy.loginfo("Get cut pliers (arm) control parameters")
         rospy.loginfo("spin_forward_comp: %s", self.spin_forward_comp)
@@ -117,11 +121,19 @@ class Subscriber():
         rospy.loginfo("cut_pliers_max_height: %s", self.cut_pliers_max_height)
         rospy.loginfo("cut_pliers_min_length: %s", self.cut_pliers_min_length)
         rospy.loginfo("cut_pliers_max_length: %s", self.cut_pliers_max_length)
-        rospy.loginfo("cut_pliers_lower_z: %s", self.cut_pliers_lower_z)
-        rospy.loginfo("cut_pliers_upper_z: %s", self.cut_pliers_upper_z)
-        rospy.loginfo("cut_pliers_target_x: %s", self.cut_pliers_target_x)
+        rospy.loginfo("z_tolerance_mm: %s", self.z_tolerance_mm)
+        rospy.loginfo("z_step_min_mm: %s", self.z_step_min_mm)
+        rospy.loginfo("z_step_max_mm: %s", self.z_step_max_mm)
+        rospy.loginfo("z_step_gain: %s", self.z_step_gain)
+        rospy.loginfo("x_tolerance_mm: %s", self.x_tolerance_mm)
+        rospy.loginfo("x_step_min_mm: %s", self.x_step_min_mm)
+        rospy.loginfo("x_step_max_mm: %s", self.x_step_max_mm)
+        rospy.loginfo("x_step_gain: %s", self.x_step_gain)
         rospy.loginfo("cut_pliers_allow_retract: %s", self.cut_pliers_allow_retract)
-        rospy.loginfo("x_tolerance_m: %s", self.x_tolerance_m)
+        rospy.loginfo("x_cut_pliers_target: %s", self.x_cut_pliers_target)
+        rospy.loginfo("cut_pliers_blind_extend_length: %s", self.cut_pliers_blind_extend_length)
+        rospy.loginfo("cut_pliers_home_length: %s", self.cut_pliers_home_length)
+        rospy.loginfo("cut_pliers_home_height: %s", self.cut_pliers_home_height)
 
     def init_parame(self):
         # Odometry_param
@@ -244,23 +256,28 @@ class Subscriber():
     #     except:
     #         pass
     # def cbGetObject(self, msg):
-    #     px, py, pz = msg.position.x, msg.position.y, msg.position.z
-    #     self.marker_2d_pose_x = -pz
+    #     try:
+    #         side_sign = -1 if self.camera_side == "right" else +1
+    #         marker_msg = msg
+    #         quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
+    #         theta = tf.transformations.euler_from_quaternion(quaternion)[1]
+    #         self.marker_2d_pose_x = -marker_msg.position.z
+    #         self.marker_2d_pose_y = side_sign * marker_msg.position.x + self.camera_tag_offset_x
+    #         self.marker_2d_pose_z = marker_msg.position.y  # 更新z轴信息
 
-    #     side_sign = -1 if self.camera_side == "right" else +1
-    #     self.marker_2d_pose_x = -pz
-    #     self.marker_2d_pose_y = side_sign * px + self.camera_tag_offset_x
-    #     self.marker_2d_pose_z = py
-    #     lateral  = side_sign * px
-    #     forward  = -pz
-    #     self.marker_2d_theta = math.atan2(lateral, forward)
+    #         self.marker_2d_theta = -theta
+
+    #         # rospy.loginfo("Pose: x=%.3f y=%.3f z=%.3f theta=%.3f (side=%s)", self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_pose_z, self.marker_2d_theta, self.camera_side,)
+
+    #     except Exception as e:
+    #         rospy.logwarn_throttle(1.0, "cbGetObject failed: %s", str(e))
+
 
     def cbGetObject(self, msg):
         px, py, pz = msg.position.x, msg.position.y, msg.position.z
 
         side_sign = -1 if self.camera_side == "right" else +1
 
-        # 推薦語意：forward(+)=cam.z、up(+)= -cam.y、lateral(+left/right)= ±cam.x
         self.marker_2d_pose_x = +pz                              # 伸長：向前為正
         self.marker_2d_pose_y = side_sign * px + self.camera_tag_offset_x  # 橫向（視相機左右翻轉）
         self.marker_2d_pose_z = -py                              # 高度：向上為正
@@ -296,8 +313,10 @@ class Subscriber():
         self.robot_2d_theta = self.total_robot_2d_theta
 
     def cbGetObjectConfidence(self, msg):
-        self.sub_detectionConfidence.pose_confidence = msg.object_IoU
-        self.sub_detectionConfidence.pose_detection = msg.object_detection
+        self.sub_detectionConfidence.pose_confidence = msg.object_confidence
+        self.sub_detectionConfidence.pose_detection = msg.model_detection
+        # self.sub_detectionConfidence.pose_confidence = msg.object_IoU
+        # self.sub_detectionConfidence.pose_detection = msg.object_detection
  
 class PBVSAction():
     def __init__(self, name):

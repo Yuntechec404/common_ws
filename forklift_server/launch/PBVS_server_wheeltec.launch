@@ -7,13 +7,13 @@
 
     <node pkg="forklift_server" type="PBVS_server_differential.py" name="PBVS_server" output="screen">
         <!--Subscriber Topic setting/-->
-        <param name="arm_ID" value="1" /><!--剪鉗1 or 2/-->
+        <param name="arm_ID" value="2" /><!--剪鉗1 or 2/-->
         <param name="odom" value="/wheel_odom" /><!--里程計 Topic（map -> base_link, 是tf相對關係, 非輪式里程計）/-->
-        <param name="pose_topic" value="/oilpalm" /><!--相機對位的 Topic/-->
+        <param name="pose_topic" value="/apple" /><!--相機對位的 Topic/-->
         <param name="object_filter" value="False" /><!--(True: , False: )/-->
         <param name="confidence_minimum" value="0.4" /><!--foundationpose信心值低於它停止動作/-->
         <param name="arm_status_topic" value="/arm_current_status" /><!--剪鉗狀態 Topic/-->
-        <param name="arm_control_topic" value="/cmd_cut_pliers_1" /><!--剪鉗動作 Topic/-->
+        <param name="arm_control_topic" value="/cmd_cut_pliers_2" /><!--剪鉗動作 Topic/-->
 
         <!--camera parking setting-->
         <param name="camera_side" value="right"/><!--left or right/-->
@@ -43,20 +43,21 @@
         <param name="cut_pliers_min_height" value="0.0"/><!--手臂最小高度（用於 fnControlArmBasedOnFruitZ）/-->
         <param name="cut_pliers_max_height" value="280.0"/><!--手臂最大高度（用於 fnControlArmBasedOnFruitZ）/-->
         <param name="cut_pliers_min_length" value="10.0" /><!--手臂最小長度（用於 fnControlArmBasedOnFruitX 和 fnBlindExtendArm）/-->
-        <param name="cut_pliers_max_length" value="440.0"/><!--手臂最大長度（用於 fnControlArmBasedOnFruitX 和 fnBlindExtendArm）/-->
+        <param name="cut_pliers_max_length" value="280.0"/><!--手臂最大長度（用於 fnControlArmBasedOnFruitX 和 fnBlindExtendArm）/-->
         
-        <param name="cut_pliers_lower_z" value="0.022" /><!--水果 Z 軸下界（用於 fnControlArmBasedOnFruitZ）/-->
-        <param name="cut_pliers_upper_z" value="0.028" /><!--水果 Z 軸上界（用於 fnControlArmBasedOnFruitZ）/-->
-        <param name="z_step_min_mm" value="3.0" /><!--手臂高度調整最小步長（用於 fnControlArmBasedOnFruitZ）/-->
+        <param name="z_tolerance_mm" value="5.0" /><!--Z 軸容許誤差（用於 fnControlArmBasedOnFruitZ）/-->
+        <param name="z_step_min_mm" value="2.0" /><!--手臂高度調整最小步長（用於 fnControlArmBasedOnFruitZ）/-->
         <param name="z_step_max_mm" value="15.0" /><!--手臂高度調整最大步長（用於 fnControlArmBasedOnFruitZ）/-->
         <param name="z_step_gain" value="0.5" /><!--手臂高度調整步長增益（用於 fnControlArmBasedOnFruitZ）/-->
 
-        <param name="cut_pliers_allow_retract" value="true" /><!--是否允許手臂後退（用於 fnControlArmBasedOnFruitX）/-->
-        <param name="x_tolerance_m" value="0.005" /><!--X 軸容許誤差（公尺）（用於 fnControlArmBasedOnFruitX）/-->
-        <param name="cut_pliers_target_x" value="0.2" /><!--水果 X 軸目標值（用於 fnControlArmBasedOnFruitX）/-->
-        <param name="x_step_min_mm" value="5.0" /><!--手臂長度調整最小步長（用於 fnControlArmBasedOnFruitX）/-->
-        <param name="x_step_max_mm" value="10.0" /><!--手臂長度調整最大步長（用於 fnControlArmBasedOnFruitX）/-->
+        <param name="cut_pliers_allow_retract" value="false" /><!--是否允許手臂後退（用於 fnControlArmBasedOnFruitX）/-->
+        <param name="x_tolerance_mm" value="5.0" /><!--X 軸容許誤差（用於 fnControlArmBasedOnFruitX）/-->
+        <param name="x_step_min_mm" value="2.0" /><!--手臂長度調整最小步長（用於 fnControlArmBasedOnFruitX）/-->
+        <param name="x_step_max_mm" value="15.0" /><!--手臂長度調整最大步長（用於 fnControlArmBasedOnFruitX）/-->
         <param name="x_step_gain" value="0.5" /><!--手臂長度調整步長增益（用於 fnControlArmBasedOnFruitX）/-->
-
+        <param name="x_cut_pliers_target" type="double" value="0.15" /><!--水果 X 軸目標值（用於 fnControlArmBasedOnFruitX）/-->
+        <param name="cut_pliers_blind_extend_length" type="double" value="150.0" /><!--盲伸的額外長度（用於 DeadMoveX）/-->
+        <param name="cut_pliers_home_length" type="double" value="10.0" /><!--手臂回原長度（GoHome）/-->
+        <param name="cut_pliers_home_height" type="double" value="140.0" /><!--手臂回原高度（GoHome）/-->
     </node>
 </launch>
