@@ -1,0 +1,49 @@
+local_costmap:
+   global_frame: odom # 1 odom 0 map
+   robot_base_frame: base_link
+   update_frequency: 15.0  #10
+   publish_frequency: 8.0 #5
+   transform_tolerance: 1.0
+
+  # 滾動視窗（局部）
+   static_map: false
+   rolling_window: true
+   width: 5.0  #10.0
+   height: 5.0 #10.0
+   resolution: 0.05  # 從 0.05 改為 0.1
+
+   map_type: costmap
+
+   # plugins:
+   # - {name: static_layer,        type: "costmap_2d::StaticLayer"} # 0
+   # - {name: obstacle_layer,      type: "costmap_2d::VoxelLayer"}       # 局部也用 VoxelLayer
+   plugins:
+    - {name: inflation_layer,     type: "costmap_2d::InflationLayer"} # 1 
+    - {name: obstacle_layer,      type: "costmap_2d::ObstacleLayer"} # 1
+
+   # ↓↓↓ 這段一定要加在 local_costmap 命名空間裡，覆蓋 common 的 pointcloud 設定 ↓↓↓
+   obstacle_layer:
+    enabled: true
+    observation_sources: scan_front_left scan_front_right
+
+    scan_front_left:
+      data_type: LaserScan
+      # topic: /scan_front_left
+      topic: /scan_front_left/filtered     # ← 改吃過濾後
+      marking: true
+      clearing: true
+      obstacle_range: 3.0
+      raytrace_range: 3.5
+      expected_update_rate: 0.0
+      inf_is_valid: true
+
+    scan_front_right:
+      data_type: LaserScan
+      # topic: /scan_front_right      
+      topic: /scan_front_right/filtered    # ← 改吃過濾後
+      marking: true
+      clearing: true
+      obstacle_range: 3.0
+      raytrace_range: 3.5
+      expected_update_rate: 0.0
+      inf_is_valid: true

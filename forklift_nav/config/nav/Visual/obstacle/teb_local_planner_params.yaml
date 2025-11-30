@@ -1,0 +1,96 @@
+TebLocalPlannerROS:
+
+ odom_topic: wheel_odom
+ map_frame: map #map odom
+ publish_feedback: true
+
+ # Trajectory
+ teb_autosize: true
+ dt_ref: 0.5 #0.4
+ dt_hysteresis: 0.3
+ allow_init_with_backwards_motion: true #False true    # 可選，讓局部姿態跟著全局路線方向
+ global_plan_overwrite_orientation: false  #True 
+ max_global_plan_lookahead_dist: 10.0 # 0.6 #NEED TO CHANGE # 3.0
+ feasibility_check_no_poses: 3 #5
+ 
+ # Robot
+ cmd_angle_instead_rotvel: false
+ max_vel_x:  0.3 #0.16 #0.3
+ max_vel_x_backwards: 0.1 #0.2   # ← 禁止倒退，殘值就算是負的也會被夾回 0
+ max_vel_y:  0.0 
+ max_vel_theta: 0.8    # 0.5
+ acc_lim_x: 0.2
+ acc_lim_y: 0.0 ##0.2
+ acc_lim_theta: 0.25    #0.3
+ min_turning_radius: 0.0 # 0.4 , 0.0 mean Spin in place
+ wheelbase: 0.25 # 0.4
+ footprint_model:  #types: "point", "circular", "two_circles", "line", "polygon"
+    type: "polygon"
+    vertices: [ [0.31, 0.25],[0.31, -0.25],[-0.31, -0.25],[-0.31, 0.25]]
+    # vertices: [ [0.31, 0.25],[0.31, -0.25],[-0.31, -0.25],[-0.31, 0.25],[0.31, 0.25]]  
+
+    #radius: 0.20 # for type "circular"
+    #vertices: [[1.75,-0.575],[1.75,0.575],[-0.25,0.575],[-0.25,0.3],[-0.75,0.3],[-0.75,-0.3],[-0.25,-0.3],[-0.25,-0.575]]
+    
+# GoalTolerance
+ xy_goal_tolerance: 0.15 #Default 0.15
+ yaw_goal_tolerance: 0.35   #0.4 #Default 0.2 / 0.8
+ free_goal_vel: false   # 保持 False，確保到點時要對正
+
+# HCPlanning
+#  enable_multithreading: False
+#  max_number_classes: 4
+#  selection_cost_hysteresis: 1.0 #0.0~2.0
+#  selection_prefer_initial_plan: 0.95 # 0.0~1.0
+#  selection_obst_cost_scale: 2.0 #0.0~1000.0
+#  selection_viapoint_cost_scale: 1.0
+#  selection_alternative_time_cost: False
+
+# Obstacles
+ min_obstacle_dist: 0.3 # 0.7
+ inflation_dist: 0.3
+ dynamic_obstacle_inflation_dist: 0.05
+ include_costmap_obstacles: true   # false true
+ costmap_obstacles_behind_robot_dist: 1.0
+ obstacle_poses_affected: 25 #7
+ costmap_converter_plugin: "costmap_converter::CostmapToLinesDBSRANSAC" # ""
+ costmap_converter_spin_thread: true
+ costmap_converter_rate: 10 # 5
+ legacy_obstacle_association: false #False
+
+ # Optimization
+ no_inner_iterations: 5  #3
+ no_outer_iterations: 4  #2
+ optimization_activate: true
+ optimization_verbose: false
+ penalty_epsilon: 0.1
+ obstacle_cost_exponent: 1.0
+ weight_max_vel_x: 1
+ weight_max_vel_theta: 1
+ weight_acc_lim_x: 1
+ weight_acc_lim_theta: 0.1 # 1.0 #0.1
+ weight_kinematics_nh: 1000.0
+ weight_kinematics_forward_drive: 9000  #向前走加強
+ weight_kinematics_turning_radius: 1
+ weight_optimaltime: 1 #0.5 #1
+ weight_obstacle: 100 #50
+ weight_inflation: 50.0
+#  weight_dynamic_obstacle: 10 #10 # not in use yet
+ selection_alternative_time_cost: False # not in use yet
+#  weight_viapoint: 10 #10  # 你有 viapoints 時，提高跟隨意圖
+#  global_plan_viapoint_sep: 5.0 #0.2   # 你目前已設 0.3 可保留
+ weight_viapoint: 0.8 # 從 1.0 降到 5.0  # 權重越大，TEB 越嚴格地貼著全域路徑行駛
+ global_plan_viapoint_sep: 0.3 # 從 0.8 降到 0.3
+
+ # Homotopy Class Planner
+ enable_homotopy_class_planning: false #False
+ enable_multithreading: false
+ simple_exploration: false
+ max_number_classes: 4
+ roadmap_graph_no_samples: 15
+ roadmap_graph_area_width: 5
+ h_signature_prescaler: 0.5
+ h_signature_threshold: 0.1
+ obstacle_keypoint_offset: 0.1
+ obstacle_heading_threshold: 0.45
+ visualize_hc_graph: false
