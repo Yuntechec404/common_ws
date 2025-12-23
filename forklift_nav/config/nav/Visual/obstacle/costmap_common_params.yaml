@@ -1,0 +1,108 @@
+# footprint: [ [-0.185, -0.12], [-0.20, 0.02], [-0.10, 0.38], [0.10, 0.38], [0.20, 0.02], [0.185, -0.12] ]
+
+# footprint: [ [0.36,0.15],[0.36,-0.15],[0.0,-0.2],[-0.15,-0.17],[-0.35,-0.17],[-0.35,0.17],[-0.15,0.17],[0.0,0.2]]
+# footprint: [ [0.31, 0.25],[0.31, -0.25],[-0.31, -0.25],[-0.31, 0.25],[0.31, 0.25]] 
+footprint: [ [0.31, 0.25],[0.31, -0.25],[-0.31, -0.25],[-0.31, 0.25]]  
+
+# footprint: [[1.75,-0.575],[1.75,0.575],[-0.25,0.575],[-0.25,0.3],[-0.75,0.3],[-0.75,-0.3],[-0.25,-0.3],[-0.25,-0.575]]
+
+map_type: costmap
+
+# —— 使用 Voxel Layer 搭配 PointCloud2（RealSense）——
+obstacle_layer:
+  enabled: true
+  # 以身形與場域估計的障礙高度範圍（之後可依相機安裝高度微調）
+  # ② 只保留一組高度閾值，避免覆蓋混淆（建議統一用來源端）（留空這兩個或刪掉都可以，以來源端為主）
+  # max_obstacle_height: 1.4 #3.0 #max_obstacle_height必須比機器人還高
+  # min_obstacle_height: 0.35 #0.2 # > 地面噪聲
+  max_obstacle_height: 2.0  # 從 3.0 降到 2.0
+  min_obstacle_height: 0.0 
+
+  obstacle_range: 3.0 # 3.0
+  raytrace_min_range: 0.0 #add
+  raytrace_range: 3.5 # 3.5
+  inflation_radius: 0.1 #0.8 #0.1 # 0.8
+  combination_method: 1 # 1=MAX
+  track_unknown_space: true
+
+  # Z 軸體素設定（越精細計算越重）
+  # ① 讓體素的 Z 高度範圍包含相機與障礙（總高 ≥ 相機高 + 目標障礙高）
+  origin_z: 0.0
+  z_resolution: 0.10          # 原本 0.2 → 0.10 0.2 #0.05 # 體素高度解析度
+  z_voxels: 12                 # 原本 2 → 12，總高 ≈ 1.2 m（足夠包含相機 0.43 m）2       #20   # 總高約 1.0 m（0.05*20）
+  unknown_threshold: 10
+  mark_threshold: 0
+  publish_voxel_map: false
+  footprint_clearing_enabled: true
+
+  observation_sources: scan
+  scan:
+    data_type: LaserScan
+    topic: /scans
+    marking: true
+    clearing: true
+    expected_update_rate: 0
+    min_obstacle_height: 0.20
+    max_obstacle_height: 2.0
+
+inflation_layer:
+  enabled:              true
+  cost_scaling_factor:  10.0  #10.0
+  inflation_radius:     0.6  #0.25 # 依安全距離需求調整 0.4~0.8
+  inflate_unknown: true
+
+static_layer:
+  enabled:              true
+  map_topic:            "/map"
+
+
+  # observation_sources: left_realsense_pc right_realsense_pc
+
+  # left_realsense_pc:
+  #   data_type: PointCloud2
+  #   topic: /left_camera/depth/color/points
+  #   expected_update_rate: 0.0     # 0=不檢查頻率
+  #   marking: true
+  #   clearing: true
+  #   min_obstacle_height: 0.10
+  #   max_obstacle_height: 0.8
+  #   # 統一用這組高度：地板濾掉，天花板不吃
+  #   # min_obstacle_height: 0.40     # 20 cm 以上才當障礙（可依實場 0.20~0.30 微調）
+  #   # max_obstacle_height: 1.20     # 1.2 m 以下才當障礙
+  #   obstacle_range: 3.0
+  #   raytrace_range: 3.5
+  #   observation_persistence: 0.0  # 不做歷史累積（預設即為 0，確保不會記住舊障礙）
+  #   inf_is_valid: true
+
+  # right_realsense_pc:
+  #   data_type: PointCloud2
+  #   topic: /right_camera/depth/color/points
+  #   expected_update_rate: 0.0
+  #   marking: true
+  #   clearing: true
+  #   min_obstacle_height: 0.10
+  #   max_obstacle_height: 0.8
+  #   # 統一用這組高度：地板濾掉，天花板不吃
+  #   # min_obstacle_height: 0.40     # 20 cm 以上才當障礙（可依實場 0.20~0.30 微調）
+  #   # max_obstacle_height: 1.20     # 1.2 m 以下才當障礙
+  #   obstacle_range: 3.0
+  #   raytrace_range: 3.5
+  #   observation_persistence: 0.0  #（預設即為 0，確保不會記住舊障礙）
+  #   inf_is_valid: true
+
+  # 3dlidar_sensor:
+  #   data_type: PointCloud2
+  #   topic: /velodyne_points
+  #   marking: true
+  #   clearing: true
+  #   min_obstacle_height: 0.05
+  #   max_obstacle_height: 3.0
+  #   observation_persistence: 0.0
+
+# sonar_layer:
+#  enabled:            true
+#  clear_threshold:    0.6
+#  mark_threshold:     0.8
+#  topics: ["/sonar0", "/sonar1", "/sonar2", "/sonar3"]
+#  clear_on_max_reading: true
+

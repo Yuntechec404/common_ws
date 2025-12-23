@@ -1,0 +1,55 @@
+shutdown_costmaps: false
+
+controller_frequency: 20.0 #4.0 #20.0
+controller_patience: 5.0 # 3.0 #15.0
+
+planner_frequency: 5.0 #1.0 #5.0
+planner_patience: 15.0 #3.0 #5.0
+
+oscillation_timeout: 10.0 #5.0 #10.0
+oscillation_distance: 0.2
+
+# Planner selection
+base_global_planner: "global_planner/GlobalPlanner"  
+base_local_planner: "teb_local_planner/TebLocalPlannerROS"
+
+max_planning_retries: 5 # 3 # 1 
+
+recovery_behavior_enabled: true  # 從 false 改為 true
+clearing_rotation_allowed: true # 從 false 改為 true
+
+recovery_behaviors:
+  # - name: 'move_slow_and_clear'
+  #   type: 'move_slow_and_clear/MoveSlowAndClear'
+  - name: 'aggressive_reset'  # 重置局部代價地圖的障礙資訊。
+    type: 'clear_costmap_recovery/ClearCostmapRecovery'
+  - name: 'clearing_rotation'   # 原地旋轉以嘗試找到新路徑。
+    type: 'rotate_recovery/RotateRecovery'
+
+# ↓ 這些參數在「clearing_rotation」命名空間生效（即 rotate_recovery 私有參數）
+clearing_rotation:
+  max_rotational_vel: 0.15          # 旋轉最高角速（rad/s）
+  min_in_place_rotational_vel: 0.05 # 原地旋轉最低角速（避免停頓抖動）
+  acc_lim_th: 0.05                  # 角加速度上限
+  frequency: 10.0                   # 發指令頻率
+  sim_granularity: 0.02             # 碰撞檢查角度粒度（越小越安全但算力↑）
+
+conservative_reset:   # 只清除 0.1 m 內障礙。
+  reset_distance: 0.1
+  layer_names: [obstacle_layer]
+
+aggressive_reset:    # 清除 0.5 m。
+  reset_distance: 0.5
+  layer_names: [obstacle_layer]
+
+super_reset:         # 清除 1.0 m。
+  reset_distance: 1.0
+  layer_names: [obstacle_layer]
+
+move_slow_and_clear:  # （慢速清除策略）
+  clearing_distance: 0.6
+  limited_trans_speed: 0.1
+  limited_rot_speed: 0.05
+  limited_distance: 0.3
+
+
