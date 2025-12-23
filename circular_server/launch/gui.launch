@@ -1,0 +1,14 @@
+<launch>
+
+<node pkg="circular_server" type="gui.py" name="gui" output="screen">
+    <!--Subscriber Topic setting/-->
+    <param name="camera_side" value="right"/><!--left or right/-->
+    <param name="odom_topic" value="/wheel_odom" /><!--里程計 Topic（map -> base_link, 是tf相對關係, 非輪式里程計）/-->
+    <param name="pose_topic" value="/oilpalm" /><!--相機對位的 Topic/-->
+    <param name="camera_tag_offset_x" value="0.0" /><!--對位目標點與tag的左右偏移量/-->
+    <param name="camera_tag_offset_z" value="0.0" /><!--對位目標點與tag的上下偏移量/-->
+
+    <param name="fileEnble" value="false" /><!--/-->
+    <param name="filename" value="/home/user/catkin_ws/mp_pallet_data.csv" /><!--/-->
+</node>
+</launch>

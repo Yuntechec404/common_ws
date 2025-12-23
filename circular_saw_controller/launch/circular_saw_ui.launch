@@ -4,6 +4,8 @@
     <param name="baudrate" value="115200"/>
     <param name="timeout" value="100"/>
     <param name="log" value="false"/>
+    <param name="target_height" value="0"/>
+    <param name="target_length" value="0"/>
   </node>
 
   <node pkg="circular_saw_controller" type="circular_saw_ui.py" name="circular_saw_ui" output="screen"/>

@@ -1,3 +1,4 @@
+# CircularSawCmd.msg
 # 位置設定（mm）
 # STM32 韌體限制：
 #   Height1(Z) : -350 ~ 0 mm   (0=最高，-350=最低)

@@ -1,12 +1,14 @@
 <launch>
-  <node pkg="circular_saw_controller" type="circular_saw" name="circular_saw" output="screen">
+    <node pkg="circular_saw_controller" type="circular_saw" name="circular_saw" output="screen">
     <param name="port" value="/dev/ttyUSB1"/>
     <param name="baudrate" value="115200"/>
     <param name="timeout" value="100"/>
-    <param name="cmd_topic" value="/circular_saw"/>
-    <param name="target_height" value="0"/>
-    <param name="target_length" value="0"/>
-    <param name="target_angle" value="0"/>
+    <param name="cmd_topic" value="/circular_saw_cmd"/>
+    <param name="state_topic" value="/circular_saw_state"/>
+    <!-- X：越大 → 越往前, Z：越大 → 越往下 -->
+    <param name="target_length" value="0"/>  <!-- X mm -->
+    <param name="target_height" value="0"/>  <!-- Z mm -->
+    <param name="target_angle" value="0.0"/>
     <param name="log" value="false"/>
   </node>
 </launch>

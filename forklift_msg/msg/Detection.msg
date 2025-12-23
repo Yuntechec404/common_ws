@@ -1,2 +1,3 @@
 bool detection_allowed
+string det_select_mode
 float32 layer

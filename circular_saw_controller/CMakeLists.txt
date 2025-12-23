@@ -5,7 +5,8 @@ find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs genmsg serial tf n
 
 add_message_files(
   FILES
-  CircularSaw.msg
+  CircularSawCmd.msg
+  CircularSawState.msg
 )
 
 generate_messages(DEPENDENCIES std_msgs)
