@@ -8,6 +8,7 @@ from apriltag_ros.msg import AprilTagDetectionArray
 from nav_msgs.msg import Odometry
 import math
 from forklift_msg.msg import meteorcar
+from geometry_msgs.msg import PoseStamped, Twist, Pose
 
 import sys
 import os
@@ -22,9 +23,11 @@ class Subscriber():
         odom = rospy.get_param(rospy.get_name() + "/odom", "/odom")
         tag_detections_up = rospy.get_param(rospy.get_name() + "/tag_detections_up", "/tag_detections_up")
         tag_detections_down = rospy.get_param(rospy.get_name() + "/tag_detections_down", "/tag_detections_down")
+        pub_name = rospy.get_param(rospy.get_name() + "/pub_name", "/robot_pose")
         forkpos = rospy.get_param(rospy.get_name() + "/forkpos", "/forkpos")
         self.sub_info_marker = rospy.Subscriber(tag_detections_up, AprilTagDetectionArray, self.cbGetMarker_up, queue_size = 1)
         self.sub_info_marker = rospy.Subscriber(tag_detections_down, AprilTagDetectionArray, self.cbGetMarker_down, queue_size = 1)
+        self.sub_map_robot = rospy.Subscriber(pub_name, Pose, self.cbGetRobotMap, queue_size = 1)
         self.sub_odom_robot = rospy.Subscriber(odom, Odometry, self.cbGetRobotOdom, queue_size = 1)
         self.sub_forwardbackpostion = rospy.Subscriber(forkpos, meteorcar, self.cbGetforkpos, queue_size = 1)
         self.ekf_theta = KalmanFilter()
@@ -38,6 +41,12 @@ class Subscriber():
         self.robot_2d_theta = 0.0
         self.previous_robot_2d_theta = 0.0
         self.total_robot_2d_theta = 0.0
+        self.robot_map_pose_x = 0.0
+        self.robot_map_pose_y = 0.0
+        self.robot_map_theta = 0.0
+        self.previous_robot_map_theta = 0.0
+        self.total_robot_map_theta = 0.0
+        self.is_map_pose_received = False # 標記是否已收到 MapToBaselink 的資料
         # AprilTag_param
         self.updown = False
         self.offset_x = 0.0
@@ -116,6 +125,46 @@ class Subscriber():
         self.previous_robot_2d_theta = self.robot_2d_theta
 
         self.robot_2d_theta = self.total_robot_2d_theta
+
+    def cbGetRobotMap(self, msg):
+        """
+        接收 MapToBaselink (/robot_pose) 的資料，轉換並儲存為 2D 座標與角度
+        """
+        try:
+            self.is_map_pose_received = True # 防呆旗標
+            
+            self.robot_map_pose_x = msg.position.x
+            self.robot_map_pose_y = msg.position.y
+            
+            # 從四元數轉換為 Yaw 角 (Theta)
+            quaternion = (msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w)
+            theta = tf.transformations.euler_from_quaternion(quaternion)[2]
+            
+            # 保持角度在 0 ~ 2*pi 之間
+            if theta < 0:
+                theta = theta + math.pi * 2
+            if theta > math.pi * 2:
+                theta = theta - math.pi * 2
+                
+            self.robot_map_theta = theta
+            
+            # 計算連續旋轉的總角度 (處理跨越 360 度的跳變)
+            if (self.robot_map_theta - self.previous_robot_map_theta) > math.pi:
+                d_theta = (self.robot_map_theta - self.previous_robot_map_theta) - 2 * math.pi
+            elif (self.robot_map_theta - self.previous_robot_map_theta) < -math.pi:
+                d_theta = (self.robot_map_theta - self.previous_robot_map_theta) + 2 * math.pi
+            else:
+                d_theta = (self.robot_map_theta - self.previous_robot_map_theta)
+
+            self.total_robot_map_theta = self.total_robot_map_theta + d_theta
+            self.previous_robot_map_theta = self.robot_map_theta
+            
+            # 將最終用來計算的角度設為累加後的總角度
+            self.robot_map_theta = self.total_robot_map_theta
+            
+        except Exception as e:
+            self.is_map_pose_received = False
+            rospy.logwarn(f"Error in cbGetRobotMap: {e}")
 
     def cbGetforkpos(self, msg):
         self.updownposition = msg.fork_position

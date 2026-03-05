@@ -160,21 +160,22 @@ class Action():
                     return True
                 else:
                     # 依相機側別決定第一個 90° 轉向：右側 => +90；左側 => -90
-                    self.first_turn_deg = getattr(self.Subscriber, "turn_dir_deg", -90)  # 預設 left
+                    self.first_turn_deg = 90 if self.Subscriber.camera_side == "right" else -90
+                    
                     self.second_turn_deg = -self.first_turn_deg
                     self.current_nearby_sequence = self.NearbySequence.turn_right.value  # 名稱沿用，不代表一定「右」
             # 若無觀測信心則維持等待
             return False
 
         elif self.current_nearby_sequence == self.NearbySequence.turn_right.value:
-            # 用 first_turn_deg（+90 或 -90）
+            # 用 +90 或 -90
             if self.fnseqDeadReckoningAngle(self.first_turn_deg):
                 self.current_nearby_sequence = self.NearbySequence.go_straight.value
             return False
 
         # 前後調整階段
         elif self.current_nearby_sequence == self.NearbySequence.go_straight.value:
-            self.Subscriber.fnDetectionAllowed(False, 0.0)  # fnDetectionAllowed(self, pose_detection, layer)
+            self.Subscriber.fnDetectionAllowed(pose_detection=False, det_select_mode="nearest_depth")
             fwd = -(self.desired_dist_diff + err + float(self.Subscriber.spin_forward_comp))
             if self.fnseqDeadReckoning(fwd):
                 self.current_nearby_sequence = self.NearbySequence.turn_left.value
@@ -509,16 +510,14 @@ class Action():
         rospy.logwarn("X: 超時")
         return False
     
-    def fnBlindExtendArm(self, timeout=7.0, speed=2000):
+    def fnBlindExtendArm(self, speed=2000):
         """
-        盲伸：
-        - 基於目前 X 長度 + blind_extend_length
-        - 前伸 = X 更負
-        - 使用 DeadMoveX 一次走到底
-        - DeadMoveX 自己會用 last_cmd_x 避免重複發相同目標
+        盲伸（非阻塞）：
+        - 第一次呼叫時鎖定 target = 起始x_pos + extra
+        - 後續呼叫都朝同一個 target 前進
+        - 到位後回 True，並鎖住 blind_extend_completed
         """
         if getattr(self, "blind_extend_completed", False):
-            rospy.logwarn("fnBlindExtendArm 已經做過，略過此次呼叫")
             return True
 
         st = self.Subscriber.circular_saw_state
@@ -529,27 +528,27 @@ class Action():
         L_MIN = float(self.Subscriber.circular_saw_min_length)
         L_MAX = float(self.Subscriber.circular_saw_max_length)
 
-        cur_l = float(st.x_pos)
-
         extra = float(self.Subscriber.circular_saw_blind_extend_length)  # 正值 mm
-        raw_tgt = cur_l + abs(extra)   # 往前伸 → X 變大
-        tgt_l = self._saturate(raw_tgt, L_MIN, L_MAX)
 
-        rospy.loginfo(f"BlindExtend: cur={cur_l:.1f}mm, extra={extra:.1f}mm → target={tgt_l:.1f}mm")
+        # 第一次：鎖定 target（只算一次）
+        if not hasattr(self, "_blind_extend_target"):
+            cur_l0 = float(st.x_pos)
+            raw_tgt = cur_l0 + abs(extra)
+            self._blind_extend_target = self._saturate(raw_tgt, L_MIN, L_MAX)
+            rospy.loginfo(
+                f"BlindExtend(init): cur0={cur_l0:.1f}mm, extra={extra:.1f}mm → target={self._blind_extend_target:.1f}mm"
+            )
 
-        start = time.time()
-        while time.time() - start < timeout:
-            done = self.DeadMoveX(tgt_l, x_tolerance=5.0, speed=speed)
-            if done:
-                rospy.loginfo(f"盲伸完成：到達 {tgt_l:.1f} mm")
-                self.blind_extend_completed = True
-                return True
-            rospy.sleep(0.1)
+        # 每次都朝同一個 target 前進
+        done = self.DeadMoveX(self._blind_extend_target, x_tolerance=5.0, speed=speed)
 
-        rospy.logerr(f"盲伸超時 (tgt={tgt_l:.1f}mm)")
+        if done:
+            rospy.loginfo(f"盲伸完成：到達 {self._blind_extend_target:.1f} mm")
+            self.blind_extend_completed = True
+            delattr(self, "_blind_extend_target")  # 清掉，避免下次流程誤用
+            return True
+
         return False
-
-        # -----------------------------
 
     def _dead_rotate_angle(self, target_deg, tolerance_deg, speed=2000):
         """
@@ -614,6 +613,7 @@ class Action():
         - timeout: 最長等待時間 (s)
         - angle_tolerance: 角度誤差容許 (deg)
         """
+        cur_angle = None
         start = time.time()
 
         # 先讀一次 marker_2d_theta（單位 rad），轉成 deg
@@ -665,7 +665,8 @@ class Action():
             self.DeadRotateAngle(target_angle, angle_tolerance=angle_tolerance, speed=speed)
             rospy.sleep(0.1)
 
-        rospy.logwarn(f"[ANGLE] 超時: target={target_angle:.2f}deg，最後角度={cur_angle:.2f}deg")
+        last_str = "N/A" if cur_angle is None else f"{cur_angle:.2f}"
+        rospy.logwarn(f"[ANGLE] 超時: target={target_angle:.2f}deg，最後角度={last_str}deg")
         return False
     
     def SawRunStop(self, saw_speed, timeout=10.0, speed=2000):
@@ -686,7 +687,7 @@ class Action():
         # rospy.loginfo('shelf_detection: {0}'.format(self.Subscriber.sub_detectionConfidence.shelf_detection))
         # rospy.loginfo('shelf_confidence: {0}'.format(self.Subscriber.sub_detectionConfidence.shelf_confidence))
         # rospy.loginfo('confidence_minimum: {0}'.format(self.Subscriber.confidence_minimum))
-        if self.Subscriber.object_state == "" or self.Subscriber.object_state != "STABLE":
+        if self.Subscriber.sub_detectionConfidence.state == "" or self.Subscriber.sub_detectionConfidence.state != "STABLE":
             self.cmd_vel.fnStop()
             self._soft_stop_arm()
             return False

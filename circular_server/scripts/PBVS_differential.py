@@ -50,13 +50,13 @@ class PBVS():
             if current_sequence != previous_sequence:
                 rospy.loginfo('Current Sequence: {0}'.format(ParkingCameraSequence(current_sequence)))
                 previous_sequence = current_sequence  # 更新 previous_sequence
-            if self.subscriber.object_state != previous_state or self.subscriber.tag != previous_tag:
-                rospy.loginfo('{1} State: {0}'.format(self.subscriber.object_state, self.subscriber.tag))
-                previous_state = self.subscriber.object_state  # 更新 previous_state
-                previous_tag = self.subscriber.tag  # 更新 previous_tag
+            if self.subscriber.sub_detectionConfidence.state != previous_state or self.subscriber.sub_detectionConfidence.tag != previous_tag:
+                rospy.loginfo('{1} State: {0}'.format(self.subscriber.sub_detectionConfidence.state, self.subscriber.sub_detectionConfidence.tag))
+                previous_state = self.subscriber.sub_detectionConfidence.state  # 更新 previous_state
+                previous_tag = self.subscriber.sub_detectionConfidence.tag  # 更新 previous_tag
 
             if(current_sequence == ParkingCameraSequence.initial_marker.value):
-                self.subscriber.fnDetectionAllowed(True, "score")
+                self.subscriber.fnDetectionAllowed(pose_detection=True, det_select_mode="nearest_depth")
                 self.is_sequence_finished = self.Action.fnSeqMarkerDistanceValid()
                 
                 if self.is_sequence_finished == True:
@@ -70,14 +70,14 @@ class PBVS():
                     current_sequence = ParkingCameraSequence.parking.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingCameraSequence.parking.value):
-                self.subscriber.fnDetectionAllowed(True, "score")
+                self.subscriber.fnDetectionAllowed(pose_detection=True, det_select_mode="nearest_depth")
                 self.is_sequence_finished = self.Action.fnSeqParking(self.subscriber.camera_horizon_alignment_threshold, 0.1)
                 
                 if self.is_sequence_finished == True:
                     current_sequence = ParkingCameraSequence.decide.value
                     self.is_sequence_finished = False
             elif(current_sequence == ParkingCameraSequence.decide.value):
-                self.subscriber.fnDetectionAllowed(True, "middle")
+                self.subscriber.fnDetectionAllowed(pose_detection=True, det_select_mode="middle")
                 ok_all, dist_ok = self.Action.fnSeqdecide(self.subscriber.camera_desired_dist_threshold, self.subscriber.camera_horizon_alignment_threshold )
                 
                 if ok_all == True:
@@ -104,13 +104,14 @@ class PBVS():
                     self.is_sequence_finished = False  
 
             elif current_sequence == ParkingCameraSequence.circular_saw_align_marker.value:
-                self.subscriber.fnDetectionAllowed(False, "score")
+                self.subscriber.fnDetectionAllowed(pose_detection=True, det_select_mode="nearest_depth")
                 self.is_sequence_finished = self.Action.fnAlignSawToMarker(speed=800)
                 if self.is_sequence_finished:
                     current_sequence = ParkingCameraSequence.circular_saw_run.value
                     self.is_sequence_finished = False
 
             elif(current_sequence == ParkingCameraSequence.circular_saw_run.value):
+                self.subscriber.fnDetectionAllowed(pose_detection=False, det_select_mode="nearest_depth")
                 self.is_sequence_finished = self.Action.SawRunStop(450)  # 啟動鋸片
                 if self.is_sequence_finished:
                     current_sequence = ParkingCameraSequence.circular_saw_dead_reckoning_extend.value  
@@ -142,7 +143,7 @@ class PBVS():
                     self.is_sequence_finished = False
 
             elif(current_sequence == ParkingCameraSequence.stop.value):
-                self.subscriber.fnDetectionAllowed(False, "score")
+                self.subscriber.fnDetectionAllowed(pose_detection=False, det_select_mode="nearest_depth")
                 if self.check_wait_time > 15 :
                     self.check_wait_time = 0
                     return
@@ -151,7 +152,7 @@ class PBVS():
             
             else:
                 rospy.logerr('Error: {0} does not exist'.format(current_sequence))
-                self.subscriber.fnDetectionAllowed(False, "score")
+                self.subscriber.fnDetectionAllowed(pose_detection=False, det_select_mode="nearest_depth")
                 if self.check_wait_time > 15 :
                     self.check_wait_time = 0
                     return
@@ -167,7 +168,7 @@ class PBVS():
             if current_sequence != previous_sequence:
                 rospy.loginfo('Current Sequence: {0}'.format(FrontSequence(current_sequence)))
                 previous_sequence = current_sequence  # 更新 previous_sequence
-            self.subscriber.fnDetectionAllowed(False, self.layer_dist)  # fnDetectionAllowed(self, shelf_string, pallet_string)
+            self.subscriber.fnDetectionAllowed(pose_detection=False, layer=self.layer_dist)
 
             if(current_sequence == FrontSequence.Front.value):
                 self.is_sequence_finished = self.Action.fnseqDeadReckoning(-self.layer_dist)
@@ -198,7 +199,7 @@ class PBVS():
             if current_sequence != previous_sequence:
                 rospy.loginfo('Current Sequence: {0}'.format(TurnSequence(current_sequence)))
                 previous_sequence = current_sequence  # 更新 previous_sequence
-            self.subscriber.fnDetectionAllowed(False, self.layer_dist)  # fnDetectionAllowed(self, shelf_string, pallet_string)
+            self.subscriber.fnDetectionAllowed(pose_detection=False, layer=self.layer_dist)
 
             if(current_sequence == TurnSequence.Turn.value):
                 self.is_sequence_finished = self.Action.fnseqDeadReckoningAngle(self.layer_dist)

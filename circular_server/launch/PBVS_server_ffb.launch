@@ -58,7 +58,7 @@
         <param name="x_step_min_mm" value="2.0" /><!--手臂長度調整最小步長（用於 fnControlArmBasedOnFruitX）/-->
         <param name="x_step_max_mm" value="15.0" /><!--手臂長度調整最大步長（用於 fnControlArmBasedOnFruitX）/-->
         <param name="x_step_gain" value="0.5" /><!--手臂長度調整步長增益（用於 fnControlArmBasedOnFruitX）/-->
-        <param name="x_circular_saw_target" type="double" value="0.15" /><!--水果 X 軸目標值（用於 fnControlArmBasedOnFruitX）/-->
+        <param name="x_circular_saw_target" type="double" value="0.25" /><!--水果 X 軸目標值（用於 fnControlArmBasedOnFruitX）/-->
         <param name="circular_saw_blind_extend_length" type="double" value="160.0" /><!--盲伸的額外長度（用於 DeadMoveX）/-->
         <param name="circular_saw_home_length" type="double" value="10.0" /><!--手臂回原長度（GoHome）/-->
         <param name="circular_saw_home_height" type="double" value="180.0" /><!--手臂回原高度（GoHome）/-->

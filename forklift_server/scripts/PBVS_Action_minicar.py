@@ -163,29 +163,40 @@ class Action():
             self.check_wait_time =0
             return False
         
-    def fnSeqMovingNearbyParkingLot(self):
+    def fnSeqMovingNearbyParkingLot(self, accurate_dist_tol=0.15, accurate_angle_tol=0.08):
         self.SpinOnce()
+
+        # 判斷資料來源
+        if not hasattr(self, 'Subscriber') or not self.Subscriber.is_map_pose_received:
+            rospy.logwarn_throttle(2.0, "[Warning] Map pose not received, fallback to Odom...")
+            robot_2d_theta = self.robot_2d_theta
+            robot_2d_pose_x = self.robot_2d_pose_x
+            robot_2d_pose_y = self.robot_2d_pose_y
+        else:
+            robot_2d_theta = self.Subscriber.robot_map_theta
+            robot_2d_pose_x = self.Subscriber.robot_map_pose_x
+            robot_2d_pose_y = self.Subscriber.robot_map_pose_y
+        
         if self.current_nearby_sequence == self.NearbySequence.initial_turn.value:
             if self.is_triggered == False:
                 self.is_triggered = True
-                self.initial_robot_pose_theta = self.robot_2d_theta
-                self.initial_robot_pose_x = self.robot_2d_pose_x
-                self.initial_robot_pose_y = self.robot_2d_pose_y
-
+                self.initial_robot_pose_theta = robot_2d_theta
+                self.initial_robot_pose_x = robot_2d_pose_x
+                self.initial_robot_pose_y = robot_2d_pose_y
                 self.initial_marker_pose_theta = self.TrustworthyMarker2DTheta(3)
                 self.initial_marker_pose_x = self.marker_2d_pose_x
-                # print("initial_marker_pose_theta ", self.initial_marker_pose_theta)
-                # decide doing fnSeqMovingNearbyParkingLot or not
-                desired_dist = -1* self.initial_marker_pose_x * abs(math.cos((math.pi / 2.) - self.initial_marker_pose_theta))
-                if abs(desired_dist) < 0.15:
-                    return True
+
+                desired_dist = -1 * self.initial_marker_pose_x * abs(math.cos((math.pi / 2.) - self.initial_marker_pose_theta))
+                
+                # 距離與角度都要夠準才能跳過
+                if abs(desired_dist) < accurate_dist_tol and abs(self.initial_marker_pose_theta) < accurate_angle_tol:
+                    rospy.loginfo(f"導航精準，跳過盲走平移。橫移誤差: {abs(desired_dist):.3f}, 角度誤差: {abs(self.initial_marker_pose_theta):.3f}")
+                    return True 
             
             if self.initial_marker_pose_theta < 0.0:
-                desired_angle_turn = (math.pi / 2.0) + self.initial_marker_pose_theta - (self.robot_2d_theta - self.initial_robot_pose_theta)
+                desired_angle_turn = (math.pi / 2.0) + self.initial_marker_pose_theta - (robot_2d_theta - self.initial_robot_pose_theta)
             elif self.initial_marker_pose_theta > 0.0:
-                desired_angle_turn = -(math.pi / 2.0) + self.initial_marker_pose_theta - (self.robot_2d_theta - self.initial_robot_pose_theta)
-            
-
+                desired_angle_turn = -(math.pi / 2.0) + self.initial_marker_pose_theta - (robot_2d_theta - self.initial_robot_pose_theta)
             
             desired_angle_turn = -1. * desired_angle_turn
             self.cmd_vel.fnTurn(desired_angle_turn)
@@ -212,18 +223,16 @@ class Action():
         elif self.current_nearby_sequence == self.NearbySequence.go_straight.value:
             if self.is_triggered == False:
                 self.is_triggered = True
-                self.initial_robot_pose_x = self.robot_2d_pose_x
-                self.initial_robot_pose_y = self.robot_2d_pose_y
+                self.initial_robot_pose_x = robot_2d_pose_x
+                self.initial_robot_pose_y = robot_2d_pose_y
 
-            dist_from_start = self.fnCalcDistPoints(self.initial_robot_pose_x, self.robot_2d_pose_x, self.initial_robot_pose_y, self.robot_2d_pose_y)
+            dist_from_start = self.fnCalcDistPoints(self.initial_robot_pose_x, robot_2d_pose_x, self.initial_robot_pose_y, robot_2d_pose_y)
             desired_dist = -1* self.initial_marker_pose_x * abs(math.cos((math.pi / 2.) - self.initial_marker_pose_theta))
-            # HACK: self spin error correct
             
             desired_dist = desired_dist
 
             remained_dist = desired_dist - dist_from_start 
             if remained_dist < 0  :remained_dist =0
-
             
             self.cmd_vel.fnGoStraight(desired_dist)
 
@@ -236,12 +245,12 @@ class Action():
         elif self.current_nearby_sequence == self.NearbySequence.turn_right.value:
             if self.is_triggered == False:
                 self.is_triggered = True
-                self.initial_robot_pose_theta = self.robot_2d_theta
+                self.initial_robot_pose_theta = robot_2d_theta
 
             if self.initial_marker_pose_theta < 0.0:
-                desired_angle_turn = (math.pi / 2.0) + (self.robot_2d_theta - self.initial_robot_pose_theta)
+                desired_angle_turn = (math.pi / 2.0) + (robot_2d_theta - self.initial_robot_pose_theta)
             elif self.initial_marker_pose_theta > 0.0:
-                desired_angle_turn = -(math.pi / 2.0) + (self.robot_2d_theta - self.initial_robot_pose_theta)
+                desired_angle_turn = -(math.pi / 2.0) + (robot_2d_theta - self.initial_robot_pose_theta)
             
             self.cmd_vel.fnTurn(desired_angle_turn)
             if abs(desired_angle_turn) < 0.03:
@@ -352,26 +361,51 @@ class Action():
         return math.sqrt((x1 - x2) ** 2. + (y1 - y2) ** 2.)
 
     def TrustworthyMarker2DTheta(self, time):
-        marker_2d_theta_list = [0.0]
+        marker_2d_theta_list = []
         initial_time = rospy.Time.now().secs
         
         while(abs(initial_time - rospy.Time.now().secs) < time):
             self.SpinOnce()
             marker_2d_theta_list.append(self.marker_2d_theta)
-            # print("self.marker_2d_theta", self.marker_2d_theta)
             rospy.sleep(0.05)
-        # print("marker_2d_theta_list", marker_2d_theta_list)
-        threshold = 0.5
-        mean = statistics.mean(marker_2d_theta_list)
-        stdev = statistics.stdev(marker_2d_theta_list)
-        upcutoff = mean + threshold * stdev
-        downcutoff = mean - threshold * stdev
-        clean_list = []
-        for i in marker_2d_theta_list:
-            if(i > downcutoff and i < upcutoff):
-               clean_list.append(i)
-               
-        return statistics.median(clean_list) 
+        
+        # 2. 安全檢查：如果根本沒收集到數據 (列表為空)
+        if len(marker_2d_theta_list) == 0:
+            rospy.logwarn("[Trustworthy] No marker data collected within time window. Returning 0.0")
+            return 0.0
+
+        # 3. 安全檢查：數據太少無法計算標準差 (stdev 需要至少 2 筆數據)
+        if len(marker_2d_theta_list) < 2:
+            return marker_2d_theta_list[0]
+
+        # 4. 統計過濾
+        try:
+            threshold = 0.5
+            mean = statistics.mean(marker_2d_theta_list)
+            stdev = statistics.stdev(marker_2d_theta_list)
+            
+            # 如果標準差極小 (數據都很穩定)，直接回傳平均值，避免過濾錯誤
+            if stdev < 0.0001:
+                return mean
+
+            upcutoff = mean + threshold * stdev
+            downcutoff = mean - threshold * stdev
+            
+            clean_list = []
+            for i in marker_2d_theta_list:
+                if(i > downcutoff and i < upcutoff):
+                   clean_list.append(i)
+            
+            # 5. 最終檢查：如果過濾後列表變空 (Empty Data Error 的主因)
+            if len(clean_list) == 0:
+                rospy.logwarn("[Trustworthy] All data filtered out as outliers. Returning mean.")
+                return mean
+            
+            return statistics.median(clean_list)
+
+        except statistics.StatisticsError as e:
+            rospy.logerr(f"[Trustworthy] Statistics error: {e}. Returning 0.0")
+            return 0.0
      
 class cmd_vel():
     def __init__(self):

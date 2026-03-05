@@ -3,17 +3,18 @@
     <!-- :HACK: 要改成可以設定層數的（scripts/PBVS_server_minicar.py） -->
     <rosparam param="command">
     [
-        ['TopologyMap', 'P2'],
-        ['PBVS', 'parking_bodycamera'], 
-        ['PBVS', 'raise_pallet'],
-        ['TopologyMap', 'P6'],
-        ['PBVS', 'parking_bodycamera'],
-        ['PBVS', 'drop_pallet'], 
-        ['PBVS', 'parking_forkcamera'],
-        ['PBVS', 'raise_pallet'],
-        ['TopologyMap', 'P2'],
-        ['PBVS', 'parking_bodycamera'],
-        ['PBVS', 'drop_pallet']
+        ['TopologyMap', 'P3'],
+        ['PBVS', 'parking_bodycamera', 2], 
+        ['PBVS', 'raise_pallet', 2],
+        ['TopologyMap', 'P7'],
+        ['PBVS', 'parking_bodycamera', 2],
+        ['PBVS', 'drop_pallet', 2],
+        ['PBVS', 'parking_bodycamera', 1],
+        ['PBVS', 'raise_pallet', 1],
+        ['TopologyMap', 'P11'],
+        ['PBVS', 'parking_bodycamera', 1],
+        ['PBVS', 'drop_pallet', 1],
+        ['TopologyMap', 'P14']
     ]
     </rosparam>
 </node>

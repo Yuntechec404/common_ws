@@ -4,15 +4,49 @@ import rospy
 import actionlib
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 import forklift_server.msg
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Twist, Pose
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Twist, Pose
 from visualization_msgs.msg import Marker
 import tf2_ros
+import tf
 import heapq
 import math
 
+class MapToBaselink:
+    def __init__(self, pub_name, rate, target_frame_id, source_frame_id):
+        self.pub = rospy.Publisher(pub_name, Pose, queue_size=1)
+        self.listener = tf.TransformListener()
+        self.pose_msg = Pose()
+        self.buf = [0]*7
+        self.target_frame_id = target_frame_id
+        self.source_frame_id = source_frame_id
+        
+        self.timer = rospy.Timer(rospy.Duration(1.0 / rate), self.get_transform)
 
+    def get_transform(self, event):
+        try:
+            listener_time = rospy.Time(0)
+            if self.listener.canTransform(self.target_frame_id, self.source_frame_id, listener_time):
+                (trans, rot) = self.listener.lookupTransform(self.target_frame_id, self.source_frame_id, listener_time)
+                transform_pose = list(trans) + list(rot)
+                self.publish_pose(pose=transform_pose)
+                self.buf = transform_pose
+            else:
+                self.publish_pose(pose=self.buf)
+
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
+            self.publish_pose(pose=self.buf)
+
+    def publish_pose(self, pose = [0]*7):
+        self.pose_msg.position.x = pose[0]
+        self.pose_msg.position.y = pose[1]
+        self.pose_msg.position.z = pose[2]
+        self.pose_msg.orientation.x = pose[3]
+        self.pose_msg.orientation.y = pose[4]
+        self.pose_msg.orientation.z = pose[5]
+        self.pose_msg.orientation.w = pose[6]
+
+        self.pub.publish(self.pose_msg)
 
 class TopologyMap():
     def __init__(self, start_node):
@@ -301,6 +335,11 @@ class MarkerViewer():
 
 if __name__ == '__main__':
     rospy.init_node('TopologyMap_server')
+    pub_name = rospy.get_param('~pub_name', '/robot_pose')
+    target_frame_id = rospy.get_param('~target_frame_id', '/map')
+    source_frame_id = rospy.get_param('~source_frame_id', '/base_link')
+    rate = int(rospy.get_param('~rate', 10))
+    robot_pose_pub = MapToBaselink(pub_name, rate, target_frame_id, source_frame_id)
     server = TopologyMapAction(rospy.get_name())
     
     MarkerViewer = MarkerViewer()

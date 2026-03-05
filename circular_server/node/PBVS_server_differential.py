@@ -9,6 +9,7 @@ import circular_server.msg
 import math
 from forklift_msg.msg import Detection, Confidence
 from circular_saw_controller.msg import CircularSawCmd, CircularSawState
+from std_msgs.msg import Bool
 
 import sys
 import os
@@ -30,7 +31,7 @@ class Subscriber():
         self.get_parameters()
         self.init_parame()
         self.create_subscriber_publisher()
-        self.fnDetectionAllowed(False, "score")
+        self.harvest_done_pub.publish(Bool(data=False))
 
     def get_parameters(self):
         # Subscriber Topic setting
@@ -40,6 +41,8 @@ class Subscriber():
         self.confidence_minimum = rospy.get_param(rospy.get_name() + "/confidence_minimum", 0.5)
         self.arm_status_topic = rospy.get_param(rospy.get_name() + "/arm_status_topic", "/circular_saw")
         self.arm_control_topic = rospy.get_param(rospy.get_name() + "/arm_control_topic", "/cmd_circular_saw")
+        # Harvest done signal (separate from pause/resume)
+        self.harvest_done_topic = rospy.get_param(rospy.get_name() + "/harvest_done_topic", self.pose_topic + "_harvest_done")
 
         rospy.loginfo("Get subscriber topic parameter")
         rospy.loginfo("odom_topic: {}, type: {}".format(self.odom_topic, type(self.odom_topic)))
@@ -48,6 +51,7 @@ class Subscriber():
         rospy.loginfo("confidence_minimum: {}, type: {}".format(self.confidence_minimum, type(self.confidence_minimum)))
         rospy.loginfo("arm_status_topic: {}, type: {}".format(self.arm_status_topic, type(self.arm_status_topic)))
         rospy.loginfo("arm_control_topic: {}, type: {}".format(self.arm_control_topic, type(self.arm_control_topic)))
+        rospy.loginfo("harvest_done_topic: {}, type: {}".format(self.harvest_done_topic, type(self.harvest_done_topic)))
 
         # camera parking setting
         self.camera_tag_offset_x = rospy.get_param(rospy.get_name() + "/camera_tag_offset_x", 0.0)
@@ -170,30 +174,36 @@ class Subscriber():
         self.last_command = None  # 上次命令記錄
     
     def create_subscriber_publisher(self):
-        if(self.object_filter):
-            object_pose = self.pose_topic + "_filter"
-        else:
-            object_pose = self.pose_topic
-        
+        # Tracker is unified now: it publishes ONLY forklift_msg/Confidence on `self.pose_topic`.
+        # PBVS should subscribe to that unified topic and obtain pose from Confidence.position/orientation.
+
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.cbGetOdom, queue_size = 1)
         self.pub_cmd_vel = rospy.Publisher('/cmd_vel', Twist, queue_size = 1, latch=True)
-        self.object_pose_sub = rospy.Subscriber(object_pose, Pose, self.cbGetObject, queue_size = 1)
-        self.object_pose_confidence_sub = rospy.Subscriber(self.pose_topic + "_confidence", Confidence, self.cbGetObjectConfidence, queue_size = 1)
+
+        # Unified Confidence topic: /oilpalm
+        self.object_pose_confidence_sub = rospy.Subscriber(self.pose_topic, Confidence, self.cbGetObjectConfidence, queue_size = 1)
         
         self.pose_detection_pub = rospy.Publisher(self.pose_topic + "_detection", Detection, queue_size = 1, latch=True)
+
+        self.harvest_done_pub = rospy.Publisher(self.harvest_done_topic, Bool, queue_size=1)
         
         # 新增手臂相關的 Subscriber 和 Publisher
         self.arm_control_pub = rospy.Publisher(self.arm_control_topic, CircularSawCmd, queue_size=1)
         self.arm_status_sub = rospy.Subscriber(self.arm_status_topic, CircularSawState, self.arm_status_callback, queue_size=1)
 
-    def fnDetectionAllowed(self, pose_detection, det_select_mode):
+    def fnDetectionAllowed(self, pose_detection=False, det_select_mode="nearest_depth", layer=0.0):
         pose_msg = Detection()
         pose_msg.detection_allowed = pose_detection
         pose_msg.det_select_mode = det_select_mode
+        pose_msg.layer = layer
         self.pose_detection_pub.publish(pose_msg)
 
         rospy.sleep(0.2)
         # rospy.loginfo("pose_msg = {}, pallet_msg = {}".format(pose_msg, pallet_msg))
+
+    def fnHarvestDone(self):
+        self.harvest_done_pub.publish(Bool(data=True))
+        rospy.sleep(0.1)
 
     def arm_status_callback(self, msg):
         self.circular_saw_state = msg
@@ -246,17 +256,6 @@ class Subscriber():
     def SpinOnce_confidence(self):
         return self.sub_detectionConfidence
 
-    def cbGetObject(self, msg):
-        px, py, pz = msg.position.x, msg.position.y, msg.position.z
-
-        side_sign = -1 if self.camera_side == "right" else +1
-
-        self.marker_2d_pose_x = +pz # 伸長：向前為正
-        self.marker_2d_pose_y = side_sign * px + self.camera_tag_offset_x  # 橫向（視相機左右翻轉）
-        self.marker_2d_pose_z = -py + self.camera_tag_offset_z # 高度：向上為正
-
-        self.marker_2d_theta = math.atan2(self.marker_2d_pose_y, self.marker_2d_pose_x)
-        
     def cbGetOdom(self, msg):
         if self.is_odom_received == False:
             self.is_odom_received = True 
@@ -291,6 +290,14 @@ class Subscriber():
         state = msg.state.split(':')
         self.sub_detectionConfidence.tag = state[0]
         self.sub_detectionConfidence.state = state[1]
+
+        px, py, pz = msg.position.x, msg.position.y, msg.position.z
+
+        side_sign = -1 if self.camera_side == "right" else +1
+        self.marker_2d_pose_x = +pz  # forward
+        self.marker_2d_pose_y = side_sign * px + self.camera_tag_offset_x
+        self.marker_2d_pose_z = -py + self.camera_tag_offset_z
+        self.marker_2d_theta = math.atan2(self.marker_2d_pose_y, self.marker_2d_pose_x)
  
 class PBVSAction():
     def __init__(self, name):
@@ -314,8 +321,10 @@ class PBVSAction():
             rospy.logwarn("Unknown command")
             self._result.result = 'fail'
             self._as.set_aborted(self._result)
+            self.subscriber.fnHarvestDone()
             return
         
+        self.subscriber.fnHarvestDone()
         rospy.logwarn('PBVS Succeeded')
         self._result.result = 'PBVS Succeeded'
         self._as.set_succeeded(self._result)

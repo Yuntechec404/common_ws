@@ -8,7 +8,7 @@ import apriltag_ros.msg
 def PBVS_client(msg):
     client = actionlib.SimpleActionClient('PBVS_server', forklift_server.msg.PBVSAction)
     client.wait_for_server()
-    command = forklift_server.msg.PBVSGoal(command=msg)
+    command = forklift_server.msg.PBVSGoal(command=msg[1], layer=msg[2])
     # print("send ", command)
     client.send_goal(command)
     client.wait_for_result()
@@ -56,7 +56,7 @@ if __name__ == '__main__':
             if(msg[1] == 'parking_bodycamera' or msg[1] == 'drop_pallet'):
                 result = AprilTag_up_client(True)
                 print("AprilTag_up_client result ", result)
-                result = PBVS_client(msg[1])
+                result = PBVS_client(msg)
                 print("PBVS_client result ", result)
                 result = AprilTag_up_client(False)
                 print("AprilTag_up_client result ", result)
@@ -64,7 +64,7 @@ if __name__ == '__main__':
             elif(msg[1] == 'parking_forkcamera' or msg[1] == 'raise_pallet'):
                 result = AprilTag_down_client(True)
                 print("AprilTag_down_client result ", result)
-                result = PBVS_client(msg[1])
+                result = PBVS_client(msg)
                 print("PBVS_client result ", result)
                 result = AprilTag_down_client(False)
                 print("AprilTag_down_client result ", result)
