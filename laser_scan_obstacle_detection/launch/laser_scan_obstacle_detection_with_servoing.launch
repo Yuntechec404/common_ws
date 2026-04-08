@@ -1,0 +1,59 @@
+<launch>
+    <!-- Convert depth image to laser scan -->
+    <node name="front_depthimage_to_laserscan" pkg="depthimage_to_laserscan" type="depthimage_to_laserscan" output="screen">
+        <param name="range_min" type="double" value="0.4"/>
+        <param name="range_max" type="double" value="10.0"/>    <!-- 20.0 -->
+        <param name="scan_height" type="int" value="200"/>
+        <remap from="image" to="/zed/zed_node/depth/depth_registered"/>
+        <remap from="camera_info" to="/zed/zed_node/depth/camera_info"/>
+        <!-- <param name="output_frame_id" type="string" value="left_camera_depth_frame"/> -->
+        <remap from="scan" to="/front_scan"/>     <!-- Published topic name -->
+    </node>
+
+    <node name="servoing_depthimage_to_laserscan" pkg="depthimage_to_laserscan" type="depthimage_to_laserscan" output="screen">
+        <param name="range_min" type="double" value="0.2"/>
+        <param name="range_max" type="double" value="8.0"/>    <!-- 20.0 -->
+        <param name="scan_height" type="int" value="200"/>
+        <remap from="image" to="/D435_camera/depth/image_rect_raw"/>
+        <remap from="camera_info" to="/D435_camera/depth/camera_info"/>
+        <!-- <param name="output_frame_id" type="string" value="/right_camera_link"/> -->
+        <remap from="scan" to="/servoing_scan"/>     <!-- Published topic name -->
+    </node>
+
+    <!-- Laser scan filter -->
+    <node name="front_laser_filter" pkg="laser_filters" type="scan_to_scan_filter_chain" output="screen">
+        <rosparam param="scan_filter_chain">
+            - name: angle
+              type: laser_filters/LaserScanAngularBoundsFilter
+              params:
+                <!-- ＋,— 30度 -->
+                lower_angle: -0.436111
+                upper_angle: 0.436111
+        </rosparam>
+        <remap from="scan" to="/front_scan"/>     <!-- Subscribed topic name -->
+        <remap from="scan_filtered" to="/front_scan_filtered"/>       <!-- Published topic name -->
+    </node>
+
+    <node name="servoing_laser_filter" pkg="laser_filters" type="scan_to_scan_filter_chain" output="screen">
+        <rosparam param="scan_filter_chain">
+            - name: angle
+              type: laser_filters/LaserScanAngularBoundsFilter
+              params:
+                <!-- ＋,— 30度 -->
+                lower_angle: -0.436111
+                upper_angle: 0.436111
+        </rosparam>
+        <remap from="scan" to="/servoing_scan"/>     <!-- Subscribed topic name -->
+        <remap from="scan_filtered" to="/servoing_scan_filtered"/>       <!-- Published topic name -->
+    </node>
+
+    <!-- Obstacle avoidance pause -->
+    <node name="laser_scan_obstacle_detection_with_servoing" pkg="laser_scan_obstacle_detection" type="laser_scan_obstacle_detection_with_servoing" output="screen">
+        <param name="navigation_stop_distance" type="double" value="0.495"/> <!-- 導航時的避障暫停距離 -->
+        <param name="servoing_stop_distance" type="double" value="0.4"/> <!-- 對位時的避障暫停距離 -->
+        <param name="servoing_cancel_obstacle_pause" type="double" value="0.45"/> <!-- 當對位靠近到設定的距離時，就停止使用避障暫停功能 (要比對位時的避障暫停距離來要再長一些)-->
+        <param name="publisher_topic_name" type="str" value="/cmd_vel_robot"/>
+        <param name="tag_information_topic" type="str" value="/tag_detections"/>
+    </node>
+
+</launch>
