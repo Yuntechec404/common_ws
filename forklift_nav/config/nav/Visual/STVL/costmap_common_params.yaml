@@ -1,0 +1,94 @@
+# footprint: [ [0.31, 0.25],[0.31, -0.25],[-0.31, -0.25],[-0.31, 0.25]]  
+footprint: [ [0.35, 0.32],[0.35, -0.32],[-0.35, -0.32],[-0.35, 0.32]]
+# footprint: [ [0.38, 0.35],[0.38, -0.35],[-0.38, -0.35],[-0.38, 0.35]]
+
+map_type: costmap
+
+# STVL 核心層定義
+rgbd_obstacle_layer:
+  enabled:               true
+  voxel_decay:           3.0     # 關鍵！障礙物保留 5 秒，足夠讓車子繞行不遺忘行人 #seconds if linear, e^n if exponential
+  decay_model:           0      #0=linear(線性消失), 1=exponential, -1=persistent
+  voxel_size:            0.1   #meters # 5cm 0.05 精度，適合 D455
+  track_unknown_space:   true   #default space is unknown
+  observation_persistence: 0.0  #seconds
+  max_obstacle_height:   1.5    #meters 偵測最高 2 公尺
+  unknown_threshold:     15     #voxel height
+  mark_threshold:        0      #voxel height
+  update_footprint_enabled: true
+  combination_method:    1      #1=max, 0=override
+  obstacle_range:        1.8    #meters
+  origin_z:              0.0    #meters
+  publish_voxel_map:     true   # default off ,設為 true 可在 RViz 看到 3D 體素（除錯用）
+  transform_tolerance:   0.5    # default 0.2 seconds
+  mapping_mode:          false  # default off, saves map not for navigation
+  map_save_duration:     60     #default 60s, how often to autosave
+  
+  # D455 雙相機點雲輸入
+  observation_sources:   rgbd_front_left_mark rgbd_back_right_mark rgbd_front_left_clear rgbd_back_right_clear
+  # 左相機標記
+  rgbd_front_left_mark:
+    data_type: PointCloud2
+    topic: /left_camera/depth/color/points
+    marking: true
+    clearing: false
+    # min_obstacle_height: 0.5    # 過濾地面噪音    #default 0, 0.3, meters
+    # max_obstacle_height: 1.2     #defaule 3, meters
+    min_obstacle_height: 0.15    # 過濾地面噪音    #default 0, 0.3, meters
+    max_obstacle_height: 0.7     #defaule 3, meters
+    expected_update_rate: 0.0    #default 0, if not updating at this rate at least, remove from buffer
+    observation_persistence: 0.0 #default 0, use all measurements taken during now-value, 0=latest 
+    inf_is_valid: false          #default false, for laser scans
+    clear_after_reading: true    #default false, clear the buffer after the layer gets readings from it
+    filter: "voxel"              #default passthrough, apply "voxel", "passthrough", or no filter to sensor data, recommended to have at one filter on
+    voxel_min_points: 50          #default 0, minimum points per voxel for voxel filter
+  # 左相機清除 (使用 Frustum 清除技術)
+  rgbd_front_left_clear:
+    enabled: true                #default true, can be toggled on/off with associated service call
+    data_type: PointCloud2
+    topic: /left_camera/depth/color/points
+    # topic: /scan_front_left/filtered     # ← 改吃過濾後
+    marking: false
+    clearing: true
+    min_z: 0.2                    #default 0, meters
+    max_z: 2.5                    #清除到 3.5m 遠 default 10, 7.0, meters
+    vertical_fov_angle: 0.75      #D455 垂直視角約 43度(0.75rad),default 0.7, radians
+    horizontal_fov_angle: 1.5     #D455 水平視角約 86度(1.5rad),default 1.04, radians
+    decay_acceleration: 1.        #default 0, 1/s^2. If laser scanner MUST be 0
+    model_type: 0                 #default 0 (depth camera). Use 1 for 3D Lidar
+  
+  # 右相機標記
+  rgbd_back_right_mark:
+    data_type: PointCloud2
+    topic: /right_camera/depth/color/points
+    marking: true
+    clearing: false
+    min_obstacle_height: 0.5
+    max_obstacle_height: 1.2
+    filter: "voxel"
+    voxel_min_points: 30
+
+  # 右相機清除
+  rgbd_back_right_clear:
+    data_type: PointCloud2
+    topic: /right_camera/depth/color/points
+    # topic: /scan_back_right/filtered    # ← 改吃過濾後
+    marking: false
+    clearing: true
+    min_z: 0.2                    #default 0, meters
+    max_z: 2.5                    #default 10, 7.0, meters
+    vertical_fov_angle: 0.75
+    horizontal_fov_angle: 1.5
+    model_type: 0
+
+inflation_layer:
+  enabled:              true
+  cost_scaling_factor:  10.0  #10.0
+  inflation_radius:     0.6  #0.25 # 依安全距離需求調整 0.4~0.8
+  inflate_unknown: true
+
+static_layer:
+  enabled:              true
+  map_topic:            "/map"
+
+

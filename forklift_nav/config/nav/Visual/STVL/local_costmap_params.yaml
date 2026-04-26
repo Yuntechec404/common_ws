@@ -1,0 +1,25 @@
+local_costmap:
+   global_frame: odom # 1 odom 0 map
+   robot_base_frame: base_link
+   update_frequency: 15.0  #10
+   publish_frequency: 10.0 #5
+   transform_tolerance: 1.0
+
+  # 滾動視窗（局部）
+   static_map: false
+   rolling_window: true
+   width: 5.0  #10.0
+   height: 5.0 #10.0
+   resolution: 0.05  # 從 0.05 改為 0.1
+
+   map_type: costmap
+
+   # plugins:
+   # - {name: static_layer,        type: "costmap_2d::StaticLayer"} # 0
+   # - {name: obstacle_layer,      type: "costmap_2d::VoxelLayer"}       # 局部也用 VoxelLayer
+   plugins:
+    - {name: static_layer,        type: "costmap_2d::StaticLayer"}        # 先畫牆壁
+    - {name: rgbd_obstacle_layer, type: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"} # 再畫行人(帶記憶)
+    # - {name: obstacle_layer,      type: "costmap_2d::ObstacleLayer"}      # 畫雷射障礙物
+    - {name: inflation_layer,     type: "costmap_2d::InflationLayer"} # 0
+
