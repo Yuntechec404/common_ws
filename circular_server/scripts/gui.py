@@ -7,13 +7,29 @@ from nav_msgs.msg import Odometry
 import math
 from ekf import KalmanFilter
 import tkinter as tk
+import circular_server.msg
+from forklift_msg.msg import Detection, Confidence
 
 import csv
 import os
 from datetime import datetime
+from dataclasses import dataclass
+
+@dataclass
+class DetectionConfidence:
+    pose_confidence: float
+    pose_detection: bool
+    state: str
+    tag: str
 
 class Subscriber():
     def __init__(self):
+        self.sub_detectionConfidence = DetectionConfidence(
+            pose_confidence = 0.0,
+            pose_detection = False,
+            state = "",
+            tag = ""
+        )
         odom_topic = rospy.get_param(rospy.get_name() + "/odom_topic", "/odom")
         pose_topic = rospy.get_param(rospy.get_name() + "/pose_topic", "/shelf")
         self.camera_tag_offset_x = rospy.get_param(rospy.get_name() + "/offset_x", 0.0)
@@ -43,7 +59,7 @@ class Subscriber():
         rospy.loginfo("offset_x: %s", self.camera_tag_offset_x)
         rospy.loginfo("offset_z: %s", self.camera_tag_offset_z)
 
-        self.sub_pose_topic = rospy.Subscriber(pose_topic, Pose, self.cbGetObject, queue_size = 1)
+        self.sub_pose_topic = rospy.Subscriber(pose_topic, Confidence, self.cbGetObjectConfidence, queue_size = 1)
         self.sub_odom_robot = rospy.Subscriber(odom_topic, Odometry, self.cbGetOdom, queue_size = 1)
         self.ekf_theta = KalmanFilter()
         self.init_parame()
@@ -59,20 +75,47 @@ class Subscriber():
         self.marker_2d_pose_y = 0.0
         self.marker_2d_pose_z = 0.0
         self.marker_2d_theta = 0.0
+        self.green_line_angle_rad = 0.0
+
         #ekf
         self.ekf_theta.init(1,1,5)
 
-    def cbGetObject(self, msg):
+    def cbGetObjectConfidence(self, msg):
+        self.sub_detectionConfidence.pose_confidence = msg.object_IoU
+        self.sub_detectionConfidence.pose_detection = msg.object_detection
+        self.sub_detectionConfidence.state = msg.state
+
+        state = msg.state.split(':')
+        self.sub_detectionConfidence.tag = state[0]
+        self.sub_detectionConfidence.state = state[1]
+
         px, py, pz = msg.position.x, msg.position.y, msg.position.z
 
         side_sign = -1 if self.camera_side == "right" else +1
-
-        self.marker_2d_pose_x = +pz # 伸長：向前為正
-        self.marker_2d_pose_y = side_sign * px + self.camera_tag_offset_x  # 橫向（視相機左右翻轉）
-        self.marker_2d_pose_z = -py + self.camera_tag_offset_z # 高度：向上為正
-
+        self.marker_2d_pose_x = +pz  
+        self.marker_2d_pose_y = side_sign * px + self.camera_tag_offset_x
+        self.marker_2d_pose_z = -py + self.camera_tag_offset_z
         self.marker_2d_theta = math.atan2(self.marker_2d_pose_y, self.marker_2d_pose_x)
-    
+
+        qx = msg.orientation.x
+        qy = msg.orientation.y
+        qz = msg.orientation.z
+        qw = msg.orientation.w
+        
+        matrix = tf.transformations.quaternion_matrix([qx, qy, qz, qw])
+        
+        vec_x = matrix[0, 1]  # 畫面左右的偏量 (正 = 右)
+        vec_y = matrix[1, 1]  # 畫面上下的偏量 (正 = 下，因為相機Y軸朝下)
+        
+        # 如果 vec_y < 0，代表這根綠色箭頭在畫面上是「指向上方」的 (例如 168.1 度)
+        if vec_y < 0:
+            vec_x = -vec_x  # 把向左的箭頭翻轉成向右
+            vec_y = -vec_y  # 把向上的箭頭翻轉成向下
+            # 翻轉後，原本的 168.1 度，就會瞬間變成 -11.9 度！
+
+        # 以「垂直向下」為 0 度基準！
+        self.green_line_angle_rad = math.atan2(vec_x, vec_y)
+
     def log_data(self):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
 
@@ -80,8 +123,6 @@ class Subscriber():
             writer = csv.writer(file)
             writer.writerow([timestamp, self.marker_2d_pose_x, self.marker_2d_pose_y, self.marker_2d_pose_z,
                              self.marker_2d_theta])
-        
-        # rospy.loginfo(f"Data logged at {timestamp}")
 
     def cbGetOdom(self, msg):
         if self.is_odom_received == False:
@@ -111,16 +152,21 @@ class Subscriber():
 
     def windows(self):
         self.window = tk.Tk()
-        self.window.geometry('800x100')
+        # 把視窗拉高一點點，以便容納新增加的 Label
+        self.window.geometry('800x150')
         self.labels = {
             'robot_pose':  [0,  0],
             'object_pose': [0, 40],
+            'object_rot':  [0, 80],
         }
+        
         for key, value in self.labels.items():
             if key == 'robot_pose':
                 title = "Robot Pose (X, Y, Z, Angle):"
             elif key == 'object_pose':
                 title = "Object Pose (X, Y, Z, Angle):"
+            elif key == 'object_rot':
+                title = "Object Rotation (Roll, Pitch, Yaw):"
             else:
                 title = f"{key}:"
 
@@ -147,13 +193,16 @@ class Subscriber():
         object_x = self.marker_2d_pose_x
         object_y = self.marker_2d_pose_y
         object_z = self.marker_2d_pose_z
-        # object_deg = math.degrees(self.marker_2d_theta)
         object_deg = self.marker_2d_theta
+        
+        green_line_deg = math.degrees(getattr(self, "green_line_angle_rad", 0.0))
     
         update_values = {
             'robot_pose':  f"X={robot_x:.3f},  Y={robot_y:.3f},  Z={robot_z:.3f},  θ={robot_deg:.1f}°",
             'object_pose': f"X={object_x:.3f}, Y={object_y:.3f}, Z={object_z:.3f}, θ={object_deg:.1f}°",
+            'object_rot':  f"Green Axis (Saw Tilt) = {green_line_deg:.1f}°",
         }
+        
         for key, value in update_values.items():
             self.labels[key][1].configure(text=value)
 
