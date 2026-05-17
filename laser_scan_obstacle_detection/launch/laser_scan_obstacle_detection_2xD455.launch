@@ -1,0 +1,93 @@
+<launch>
+
+  <!-- Convert depth image to laser scan (Front) -->
+  <node name="front_depthimage_to_laserscan" pkg="depthimage_to_laserscan" type="depthimage_to_laserscan" output="screen">
+    <env name="LD_LIBRARY_PATH" value="/opt/ros/noetic/lib:/opt/ros/noetic/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu"/>
+    <param name="range_min" value="0.2"/>
+    <param name="range_max" value="8.0"/>
+    <param name="scan_height" value="200"/>
+    <remap from="image"       to="/left_camera/depth/image_rect_raw"/>
+    <remap from="camera_info" to="/left_camera/depth/camera_info"/>
+    <!-- <remap from="image"       to="/left_camera/aligned_depth_to_color/image_raw"/> -->
+    <!-- <remap from="camera_info" to="/left_camera/aligned_depth_to_color/camera_info"/> -->
+    <!-- <param name="image_transport" value="raw"/> -->
+
+    <remap from="scan"        to="/front_scan"/>
+  </node>
+
+  <!-- Convert depth image to laser scan (Back) -->
+  <node name="back_depthimage_to_laserscan" pkg="depthimage_to_laserscan" type="depthimage_to_laserscan" output="screen">
+    <env name="LD_LIBRARY_PATH" value="/opt/ros/noetic/lib:/opt/ros/noetic/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu"/>
+    <param name="range_min" value="0.2"/>
+    <param name="range_max" value="8.0"/>
+    <param name="scan_height" value="200"/>
+    <remap from="image"       to="/right_camera/depth/image_rect_raw"/>
+    <remap from="camera_info" to="/right_camera/depth/camera_info"/>
+    <!-- <remap from="image"       to="/right_camera/aligned_depth_to_color/image_raw"/> -->
+    <!-- <remap from="camera_info" to="/right_camera/aligned_depth_to_color/camera_info"/> -->
+    <!-- <param name="image_transport" value="raw"/> -->
+
+    <remap from="scan"        to="/back_scan"/>
+  </node>
+
+  <!-- Laser scan filter (Front) -->
+  <node name="front_laser_filter" pkg="laser_filters" type="scan_to_scan_filter_chain" output="screen">
+    <rosparam param="scan_filter_chain">
+      - name: angle
+        type: laser_filters/LaserScanAngularBoundsFilter
+        params:
+          lower_angle: -0.436111
+          upper_angle:  0.436111
+    </rosparam>
+    <remap from="scan"          to="/front_scan"/>
+    <remap from="scan_filtered" to="/front_scan_filtered"/>
+  </node>
+
+  <!-- Laser scan filter (Back) -->
+  <node name="back_laser_filter" pkg="laser_filters" type="scan_to_scan_filter_chain" output="screen">
+    <rosparam param="scan_filter_chain">
+      - name: angle
+        type: laser_filters/LaserScanAngularBoundsFilter
+        params:
+          lower_angle: -0.436111
+          upper_angle:  0.436111
+    </rosparam>
+    <remap from="scan"          to="/back_scan"/>
+    <remap from="scan_filtered" to="/back_scan_filtered"/>
+  </node>
+
+  <!-- Obstacle avoidance pause + cmd_vel gate -->
+  <node name="laser_scan_obstacle_detection_2xcamera"
+        pkg="laser_scan_obstacle_detection"
+        type="laser_scan_obstacle_detection_2xcamera"
+        output="screen">
+    
+    <!-- 距離門檻 + 偵測開關 -->
+    <!-- <param name="stop_distance" value="0.65"/> -->
+    <param name="check_front" value="true"/>
+    <param name="check_back"  value="true"/> 
+    <param name="front_stop_distance" value="0.55"/>
+    <param name="back_stop_distance"  value="0.35"/>
+
+    <!-- 暫停 10 秒 -->
+    <param name="pause_seconds" value="10.0"/>
+    <!-- 10 秒後恢復可以暫停的狀態 -->
+    <param name="cooldown_seconds" value="10.0"/>  <!-- 新增：你要可調的秒數 -->
+
+    <!-- 固定轉發/停車發布頻率 -->
+    <param name="pub_rate_hz" value="20.0"/>
+
+    <!-- 超時保護（可依你 scan 頻率調整） -->
+    <param name="scan_timeout" value="0.5"/>
+    <param name="cmd_timeout"  value="0.5"/>
+
+    <!-- topic 指定：吃 /cmd_vel_nav → 吐 /cmd_vel -->
+    <param name="front_scan_topic" value="/front_scan_filtered"/>
+    <param name="back_scan_topic"  value="/back_scan_filtered"/>
+
+    <param name="cmd_in_topic"  value="/cmd_vel_nav"/>
+    <param name="cmd_out_topic" value="/cmd_vel"/>
+
+  </node>
+
+</launch>
