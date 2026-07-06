@@ -39,7 +39,6 @@ class Subscriber():
         # Subscriber Topic setting
         self.odom_topic = rospy.get_param(rospy.get_name() + "/odom", "/odom")
         self.pose_topic = rospy.get_param(rospy.get_name() + "/pose_topic", "/oilpalm")
-        self.object_filter = rospy.get_param(rospy.get_name() + "/object_filter", True)
         self.confidence_minimum = rospy.get_param(rospy.get_name() + "/confidence_minimum", 0.5)
         self.arm_status_topic = rospy.get_param(rospy.get_name() + "/arm_status_topic", "/circular_saw")
         self.arm_control_topic = rospy.get_param(rospy.get_name() + "/arm_control_topic", "/cmd_circular_saw")
@@ -53,45 +52,75 @@ class Subscriber():
         self.camera_base_pitch = rospy.get_param(rospy.get_name() + "/camera_base_pitch", 0.0)
         self.camera_base_roll = rospy.get_param(rospy.get_name() + "/camera_base_roll", -1.57)
 
+        # PBVS TF frames:
+        #   saw_cut_point -> oilpalm / stem
+        # 兩個目標 frame 的原點都必須定義在實際切割點。
+        self.saw_cut_frame = rospy.get_param(
+            rospy.get_name() + "/saw_cut_frame", "saw_cut_point"
+        )
+        self.bunch_target_frame = rospy.get_param(
+            rospy.get_name() + "/bunch_target_frame", "oilpalm"
+        )
+        self.stem_target_frame = rospy.get_param(
+            rospy.get_name() + "/stem_target_frame", "stem"
+        )
+
         rospy.loginfo("Get subscriber topic parameter")
         rospy.loginfo("odom_topic: {}, type: {}".format(self.odom_topic, type(self.odom_topic)))
         rospy.loginfo("pose_topic: {}, type: {}".format(self.pose_topic, type(self.pose_topic)))
-        rospy.loginfo("object_filter: {}, type: {}".format(self.object_filter, type(self.object_filter)))
         rospy.loginfo("confidence_minimum: {}, type: {}".format(self.confidence_minimum, type(self.confidence_minimum)))
         rospy.loginfo("arm_status_topic: {}, type: {}".format(self.arm_status_topic, type(self.arm_status_topic)))
         rospy.loginfo("arm_control_topic: {}, type: {}".format(self.arm_control_topic, type(self.arm_control_topic)))
         rospy.loginfo("harvest_done_topic: {}, type: {}".format(self.harvest_done_topic, type(self.harvest_done_topic)))
+        rospy.loginfo("saw_cut_frame: %s", self.saw_cut_frame)
+        rospy.loginfo("bunch_target_frame: %s", self.bunch_target_frame)
+        rospy.loginfo("stem_target_frame: %s", self.stem_target_frame)
+
+        self.bunch_z_axis_sign = rospy.get_param(rospy.get_name() + "/bunch_z_axis_sign", 0.0)
+        self.stem_z_axis_sign = rospy.get_param(rospy.get_name() + "/stem_z_axis_sign", 0.0)
 
         self.bunch_cut_height_comp_mm = rospy.get_param(rospy.get_name() + "/bunch_cut_height_comp_mm", 0.0)
         self.stem_cut_height_comp_mm = rospy.get_param(rospy.get_name() + "/stem_cut_height_comp_mm", 0.0)
-        
+        self.bunch_y_comp_mm = rospy.get_param(rospy.get_name() + "/bunch_y_comp_mm", 0.0)
+        self.stem_y_comp_mm = rospy.get_param(rospy.get_name() + "/stem_y_comp_mm", 0.0)
+
+        rospy.loginfo("bunch_z_axis_sign: %s", self.bunch_z_axis_sign)
+        rospy.loginfo("stem_z_axis_sign: %s", self.stem_z_axis_sign)
         rospy.loginfo("bunch_cut_height_comp_mm: %s", self.bunch_cut_height_comp_mm)
         rospy.loginfo("stem_cut_height_comp_mm: %s", self.stem_cut_height_comp_mm)
-        
+        rospy.loginfo("bunch_y_comp_mm: %s", self.bunch_y_comp_mm)
+        rospy.loginfo("stem_y_comp_mm: %s", self.stem_y_comp_mm)
+
         # camera parking setting
         self.camera_desired_dist_threshold = rospy.get_param(rospy.get_name() + "/camera_desired_dist_threshold", 0.0)
         self.camera_horizon_alignment_threshold = rospy.get_param(rospy.get_name() + "/camera_horizon_alignment_threshold", 0.0)
+        self.parking_stable_time_sec = rospy.get_param(
+            rospy.get_name() + "/parking_stable_time_sec", 2.0
+        )
 
         rospy.loginfo("Get camera parking parameter")
         rospy.loginfo("camera_desired_dist_threshold: {}, type: {}".format(self.camera_desired_dist_threshold, type(self.camera_desired_dist_threshold)))
         rospy.loginfo("camera_horizon_alignment_threshold: {}, type: {}".format(self.camera_horizon_alignment_threshold, type(self.camera_horizon_alignment_threshold)))
+        rospy.loginfo("parking_stable_time_sec: {}, type: {}".format(self.parking_stable_time_sec, type(self.parking_stable_time_sec)))
 
         # Cut pliers (arm) control settings
         self.spin_forward_comp = rospy.get_param(rospy.get_name() + "/spin_forward_comp", 0.0)
 
-        # === Anti-overshoot 參數（mm 單位）===
-        self.marker_to_mm     = rospy.get_param(rospy.get_name() + "/marker_to_mm", 1000.0)
-        self.z_lead_near_mm   = rospy.get_param(rospy.get_name() + "/z_lead_near_mm", 6.0)
-        self.z_lead_far_mm    = rospy.get_param(rospy.get_name() + "/z_lead_far_mm", 12.0)
-        self.z_lead_switch_mm = rospy.get_param(rospy.get_name() + "/z_lead_switch_mm", 25.0)
-        self.z_step_max_mm    = rospy.get_param(rospy.get_name() + "/z_step_max_mm", 30.0)
+        # X/Z 控制方向與穩定完成判斷
+        # cmd_invert：底層控制器的位置命令方向是否需要反向映射
+        # visual_sign_invert：視覺誤差方向是否需要反向
+        self.x_cmd_invert = rospy.get_param(rospy.get_name() + "/x_cmd_invert", False)
+        self.z_cmd_invert = rospy.get_param(rospy.get_name() + "/z_cmd_invert", False)
+        self.x_visual_sign_invert = rospy.get_param(rospy.get_name() + "/x_visual_sign_invert", False)
+        self.z_visual_sign_invert = rospy.get_param(rospy.get_name() + "/z_visual_sign_invert", False)
 
-        self.x_lead_near_mm   = rospy.get_param(rospy.get_name() + "/x_lead_near_mm", 10.0)
-        self.x_lead_far_mm    = rospy.get_param(rospy.get_name() + "/x_lead_far_mm", 20.0)
-        self.x_lead_switch_mm = rospy.get_param(rospy.get_name() + "/x_lead_switch_mm", 40.0)
-        self.x_step_max_mm    = rospy.get_param(rospy.get_name() + "/x_step_max_mm", 50.0)
-
-        self.zx_stable_frames = rospy.get_param(rospy.get_name() + "/zx_stable_frames", 5)
+        # 進入容許帶後立即停止，且必須連續維持這段時間才算完成
+        self.zx_stable_time_sec = rospy.get_param(rospy.get_name() + "/zx_stable_time_sec", 1.0)
+        self.axis_cmd_resend_sec = rospy.get_param(rospy.get_name() + "/axis_cmd_resend_sec", 0.3)
+        # 判斷上一個小步位置命令是否已經執行完成
+        self.axis_motion_tolerance_mm = rospy.get_param(
+            rospy.get_name() + "/axis_motion_tolerance_mm", 1.0
+        )
 
         # 安全行程（mm）
         self.circular_saw_min_height = rospy.get_param(rospy.get_name() + "/circular_saw_min_height", 0.0)
@@ -119,45 +148,18 @@ class Subscriber():
         self.circular_saw_home_length = rospy.get_param(rospy.get_name() + "/circular_saw_home_length", 0.0)
         self.circular_saw_home_height = rospy.get_param(rospy.get_name() + "/circular_saw_home_height", 0.0)
 
-        # 視覺伺服小步部署與自動方向修正
+        # 視覺伺服小步部署
         self.visual_servo_step_max_mm = rospy.get_param(rospy.get_name() + "/visual_servo_step_max_mm", 12.0)
-
-        # command invert：logical target 到 controller command 的方向是否反向。
-        # 若設錯，系統會根據 state 回授自動修正。
-        self.x_cmd_invert = rospy.get_param(rospy.get_name() + "/x_cmd_invert", False)
-        self.z_cmd_invert = rospy.get_param(rospy.get_name() + "/z_cmd_invert", False)
-
-        self.x_auto_invert_enable = rospy.get_param(rospy.get_name() + "/x_auto_invert_enable", True)
-        self.z_auto_invert_enable = rospy.get_param(rospy.get_name() + "/z_auto_invert_enable", True)
-
-        # visual_sign_invert：視覺誤差正負號與手臂 logical 方向是否反向。
-        # 若設錯，系統會根據「移動後誤差是否變大」自動修正。
-        self.x_visual_sign_invert = rospy.get_param(rospy.get_name() + "/x_visual_sign_invert", False)
-        self.z_visual_sign_invert = rospy.get_param(rospy.get_name() + "/z_visual_sign_invert", False)
-
-        self.x_auto_visual_sign_enable = rospy.get_param(rospy.get_name() + "/x_auto_visual_sign_enable", True)
-        self.z_auto_visual_sign_enable = rospy.get_param(rospy.get_name() + "/z_auto_visual_sign_enable", True)
-
-        self.axis_auto_delay_sec = rospy.get_param(rospy.get_name() + "/axis_auto_delay_sec", 0.35)
-        self.axis_auto_min_move_mm = rospy.get_param(rospy.get_name() + "/axis_auto_min_move_mm", 2.0)
-        self.axis_auto_worsen_margin_mm = rospy.get_param(rospy.get_name() + "/axis_auto_worsen_margin_mm", 6.0)
-
-        self.x_err_ema_alpha = rospy.get_param(rospy.get_name() + "/x_err_ema_alpha", 0.35)
-        self.z_err_ema_alpha = rospy.get_param(rospy.get_name() + "/z_err_ema_alpha", 0.35)
-
 
         rospy.loginfo("Get cut pliers (arm) control parameters")
         rospy.loginfo("spin_forward_comp: %s", self.spin_forward_comp)
-        rospy.loginfo("marker_to_mm: %s", self.marker_to_mm)
-        rospy.loginfo("z_lead_near_mm: %s", self.z_lead_near_mm)
-        rospy.loginfo("z_lead_far_mm: %s", self.z_lead_far_mm)
-        rospy.loginfo("z_lead_switch_mm: %s", self.z_lead_switch_mm)
-        rospy.loginfo("z_step_max_mm: %s", self.z_step_max_mm)
-        rospy.loginfo("x_lead_near_mm: %s", self.x_lead_near_mm)
-        rospy.loginfo("x_lead_far_mm: %s", self.x_lead_far_mm)
-        rospy.loginfo("x_lead_switch_mm: %s", self.x_lead_switch_mm)
-        rospy.loginfo("x_step_max_mm: %s", self.x_step_max_mm)
-        rospy.loginfo("zx_stable_frames: %s", self.zx_stable_frames)
+        rospy.loginfo("x_cmd_invert: %s", self.x_cmd_invert)
+        rospy.loginfo("z_cmd_invert: %s", self.z_cmd_invert)
+        rospy.loginfo("x_visual_sign_invert: %s", self.x_visual_sign_invert)
+        rospy.loginfo("z_visual_sign_invert: %s", self.z_visual_sign_invert)
+        rospy.loginfo("zx_stable_time_sec: %s", self.zx_stable_time_sec)
+        rospy.loginfo("axis_cmd_resend_sec: %s", self.axis_cmd_resend_sec)
+        rospy.loginfo("axis_motion_tolerance_mm: %s", self.axis_motion_tolerance_mm)
         rospy.loginfo("circular_saw_min_height: %s", self.circular_saw_min_height)
         rospy.loginfo("circular_saw_max_height: %s", self.circular_saw_max_height)
         rospy.loginfo("circular_saw_min_length: %s", self.circular_saw_min_length)
@@ -178,22 +180,7 @@ class Subscriber():
         rospy.loginfo("circular_saw_blind_extend_length: %s", self.circular_saw_blind_extend_length)
         rospy.loginfo("circular_saw_home_length: %s", self.circular_saw_home_length)
         rospy.loginfo("circular_saw_home_height: %s", self.circular_saw_home_height)
-
         rospy.loginfo("visual_servo_step_max_mm: %s", self.visual_servo_step_max_mm)
-        rospy.loginfo("x_cmd_invert: %s", self.x_cmd_invert)
-        rospy.loginfo("z_cmd_invert: %s", self.z_cmd_invert)
-        rospy.loginfo("x_auto_invert_enable: %s", self.x_auto_invert_enable)
-        rospy.loginfo("z_auto_invert_enable: %s", self.z_auto_invert_enable)
-        rospy.loginfo("x_visual_sign_invert: %s", self.x_visual_sign_invert)
-        rospy.loginfo("z_visual_sign_invert: %s", self.z_visual_sign_invert)
-        rospy.loginfo("x_auto_visual_sign_enable: %s", self.x_auto_visual_sign_enable)
-        rospy.loginfo("z_auto_visual_sign_enable: %s", self.z_auto_visual_sign_enable)
-        rospy.loginfo("axis_auto_delay_sec: %s", self.axis_auto_delay_sec)
-        rospy.loginfo("axis_auto_min_move_mm: %s", self.axis_auto_min_move_mm)
-        rospy.loginfo("axis_auto_worsen_margin_mm: %s", self.axis_auto_worsen_margin_mm)
-        rospy.loginfo("x_err_ema_alpha: %s", self.x_err_ema_alpha)
-        rospy.loginfo("z_err_ema_alpha: %s", self.z_err_ema_alpha)
-
 
     def init_parame(self):
         # Odometry_param
@@ -355,65 +342,178 @@ class Subscriber():
         else:
             return "center", camera_y
     
+    def _get_target_config(self, fallback_frame_id=""):
+        """
+        回傳目前目標的 target frame 與補償設定。
+
+        共同 PBVS 參考座標：
+            saw_cut_frame（預設 saw_cut_point）
+
+        bunch:
+            saw_cut_point -> oilpalm
+            oilpalm 原點必須是果串切割點。
+
+        stem:
+            saw_cut_point -> stem
+            stem 原點必須是葉莖切割點。
+
+        相機與鋸片的剛性外參只存在於：
+            camera_color_optical_frame -> saw_cut_point
+        不再把相機到鋸片的偏移掛在 oilpalm / stem 底下。
+        """
+        target_tag = str(getattr(self.sub_detectionConfidence, "tag", "") or "").strip().lower()
+        current_target = str(
+            getattr(self, "current_vision_target", fallback_frame_id) or fallback_frame_id or ""
+        ).strip().lower()
+
+        bunch_aliases = {
+            "bunch", "oilpalm",
+            str(getattr(self, "bunch_target_frame", "oilpalm")).strip().lower(),
+        }
+        stem_aliases = {
+            "stem",
+            str(getattr(self, "stem_target_frame", "stem")).strip().lower(),
+        }
+
+        # Confidence.state 解析出的 tag 優先；frame_id 僅在 tag 尚未建立時備援。
+        if target_tag in stem_aliases:
+            use_stem = True
+        elif target_tag in bunch_aliases:
+            use_stem = False
+        else:
+            use_stem = current_target in stem_aliases
+
+        if use_stem:
+            target_kind = "stem"
+            target_frame = self.stem_target_frame
+            z_axis_sign = float(getattr(self, "stem_z_axis_sign", -1.0))
+            z_comp_m = float(getattr(self, "stem_cut_height_comp_mm", 0.0)) * 0.001
+            y_comp_m = float(getattr(self, "stem_y_comp_mm", 0.0)) * 0.001
+        else:
+            # 未知或尚未收到 tag 時，維持原流程的 bunch fallback。
+            target_kind = "bunch"
+            target_frame = self.bunch_target_frame
+            z_axis_sign = float(getattr(self, "bunch_z_axis_sign", -1.0))
+            z_comp_m = float(getattr(self, "bunch_cut_height_comp_mm", 0.0)) * 0.001
+            y_comp_m = float(getattr(self, "bunch_y_comp_mm", 0.0)) * 0.001
+
+        return target_kind, target_frame, z_axis_sign, z_comp_m, y_comp_m
+
+    def _target_y_axis_angle_from_relative_quaternion(self, rot, target_kind):
+        """
+        由 saw_cut_frame -> target 的相對旋轉計算目標方向角。
+
+        使用 target frame 的 +Y 軸（綠軸）投影到 saw/camera optical
+        的 XY 影像平面：
+            +X = 畫面向右
+            +Y = 畫面向下
+
+        垂直向下定義為 0 rad。由於切割方向通常沒有箭頭正反之分，
+        當 +Y 指向畫面上方時將整條軸翻轉 180 度，使角度維持在
+        約 [-90, +90] 度。
+        """
+        R = tf.transformations.quaternion_matrix(rot)
+        vec_x = float(R[0, 1])
+        vec_y = float(R[1, 1])
+
+        projection_norm = math.hypot(vec_x, vec_y)
+        if projection_norm < 1e-6:
+            rospy.logwarn_throttle(
+                1.0,
+                f"[PBVS ANGLE] {target_kind} 的 +Y 軸接近相機視線方向，"
+                "影像平面角度不可靠，暫時沿用上一筆角度。"
+            )
+            return float(getattr(self, "green_line_angle_rad", 0.0))
+
+        if vec_y < 0.0:
+            vec_x = -vec_x
+            vec_y = -vec_y
+
+        return math.atan2(vec_x, vec_y)
+
     def update_target_from_tf(self):
         """
-        從 TF 取得目前視覺目標的 T_camera_object，
-        並轉成 PBVS / Action 使用的控制座標。
-        - tracker 端必須保證 bunch / stem 都是 T_camera_object
-        - 這裡只負責 camera optical frame -> PBVS control frame
-        """
-        current_target = getattr(self, "current_vision_target", "oilpalm")
+        將果串與葉莖統一轉換為「目標切割點相對鋸片切割點」的 PBVS 誤差。
 
-        if current_target == "oilpalm":
-            target_frame = "oilpalm_cut_target"
-        else:
-            target_frame = "stem_cut_target"
+        TF lookup：
+            saw_cut_frame -> oilpalm   (bunch)
+            saw_cut_frame -> stem      (stem)
+
+        因 saw_cut_point 與 camera optical 軸方向相同：
+            relative +X = 畫面向右
+            relative +Y = 畫面向下
+            relative +Z = 鋸片前方
+
+        PBVS / Action 使用：
+            marker_x = forward distance
+            marker_y = lateral error
+            marker_z = vertical error
+            marker_theta = target +Y axis angle
+        """
+        target_kind, target_frame, z_axis_sign, z_comp_m, y_comp_m = self._get_target_config()
+        reference_frame = self.saw_cut_frame
 
         try:
             self.tf_listener.waitForTransform(
-                "camera_color_optical_frame",
+                reference_frame,
                 target_frame,
                 rospy.Time(0),
                 rospy.Duration(0.05)
             )
 
             trans, rot = self.tf_listener.lookupTransform(
-                "camera_color_optical_frame",
+                reference_frame,
                 target_frame,
                 rospy.Time(0)
             )
 
-            # trans 是 camera_color_optical_frame 下的位置：
-            #   optical +X = image right
-            #   optical +Y = image down
-            #   optical +Z = camera forward
-            ox, oy, oz = map(float, trans)
+            # target 相對 saw_cut_point 的座標。
+            # saw_cut_point 在 launch 中保持與 camera optical 相同軸向。
+            ex, ey, ez = map(float, trans)
 
-            # PBVS / Action control coordinate:
-            #   x = forward
-            #   y = lateral
-            #   z = vertical up
-            self.marker_2d_pose_x = +oz
-            self.marker_2d_pose_y = +ox
-            if current_target == "oilpalm":
-                z_comp_m = float(getattr(self, "bunch_cut_height_comp_mm", 0.0)) * 0.001
-            else:
-                z_comp_m = float(getattr(self, "stem_cut_height_comp_mm", 0.0)) * 0.001
-            self.marker_2d_pose_z = -oy + z_comp_m
+            # 前後：目標在鋸片前方的距離。
+            # X 軸控制仍可用 x_circular_saw_target 保留預停距離。
+            self.marker_2d_pose_x = ez
 
-            # 水平角度：目標相對相機正前方的左右偏角
-            self.marker_2d_theta = math.atan2(ox, max(oz, 1e-6))
-            self.green_line_angle_rad = self.marker_2d_theta
+            # 左右：目標相對鋸片的水平誤差。
+            # y_comp_m 僅作最後的小量機構校正。
+            self.marker_2d_pose_y = ex + y_comp_m
+
+            # 高度：目標相對鋸片的垂直誤差。
+            # optical +Y 向下；目前 launch 的 sign=-1 會轉成「向上為正」。
+            self.marker_2d_pose_z = z_axis_sign * ey + z_comp_m
+
+            # 姿態：直接使用 target 相對 saw 的 6D / 幾何 pose，
+            # 不再用 atan2(position_y, position_z) 代替物件角度。
+            target_angle = self._target_y_axis_angle_from_relative_quaternion(
+                rot, target_kind
+            )
+            self.marker_2d_theta = target_angle
+            self.green_line_angle_rad = target_angle
+
+            rospy.loginfo_throttle(
+                0.5,
+                f"[PBVS TARGET] kind={target_kind}, "
+                f"tf={reference_frame}->{target_frame}, "
+                f"right={ex:.3f}m, down={ey:.3f}m, forward={ez:.3f}m, "
+                f"control_x={self.marker_2d_pose_x:.3f}m, "
+                f"control_y={self.marker_2d_pose_y:.3f}m, "
+                f"control_z={self.marker_2d_pose_z:.3f}m, "
+                f"angle={math.degrees(target_angle):.1f}deg, "
+                f"y_comp={y_comp_m:.3f}m, "
+                f"z_sign={z_axis_sign:+.1f}, z_comp={z_comp_m:.3f}m"
+            )
 
             return True
 
-        except Exception:
+        except Exception as e:
             rospy.logwarn_throttle(
                 1.0,
-                f"[PBVS TF] 尚未發現目標或 TF 暫時斷開 ({target_frame})，手臂維持安全等待..."
+                f"[PBVS TARGET] 尚未取得 TF {reference_frame}->{target_frame}，"
+                f"手臂維持安全等待... err={e}"
             )
             return False
-        
+
     def __del__(self):
         self.window.destroy()
 
@@ -461,12 +561,9 @@ class Subscriber():
         self.sub_detectionConfidence.tag = state[0]
         self.sub_detectionConfidence.state = state[1]
 
-        px, py, pz = msg.position.x, msg.position.y, msg.position.z
-
-        self.marker_2d_pose_x = +pz  # forward
-        self.marker_2d_pose_y = px
-        self.marker_2d_pose_z = -py
-        self.marker_2d_theta = math.atan2(px, self.marker_2d_pose_x)
+        target_kind, target_frame, z_axis_sign, z_comp_m, y_comp_m = self._get_target_config(
+            fallback_frame_id=msg.frame_id
+        )
 
         qx = msg.orientation.x
         qy = msg.orientation.y

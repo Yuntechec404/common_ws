@@ -47,9 +47,11 @@ class PBVS():
         # 避免上一輪採收留下 blind_extend_completed 或 _last_cmd_*，
         # 造成本輪盲伸 / 回原點命令不發布。
         self.Action.blind_extend_completed = False
+        self.Action.x_overshoot_mm = 0.0
         if hasattr(self.Action, "_blind_extend_target"):
             delattr(self.Action, "_blind_extend_target")
-        self.Action._reset_axis_cmd_cache()
+        if hasattr(self.Action, "_blind_extend_effective_extra_mm"):
+            delattr(self.Action, "_blind_extend_effective_extra_mm")
 
         previous_sequence = None  # 用來記錄上一次的階段
         previous_state = None  # 用來記錄上一次的階段狀態
@@ -112,17 +114,23 @@ class PBVS():
                     ok_all = False
 
             elif(current_sequence == ParkingCameraSequence.circular_saw_align_Z.value):
-                # self.is_sequence_finished = self.Action.ClawAlignZX()
+                if not self.subscriber.update_target_from_tf():
+                    self.is_sequence_finished = self.Action.CircularStop()
+                    continue
                 self.is_sequence_finished = self.Action.fnControlArmBasedOnFruitZ(speed=800)
                 if self.is_sequence_finished:
-                    current_sequence = ParkingCameraSequence.circular_saw_align_X.value  
-                    self.is_sequence_finished = False  
+                    current_sequence = ParkingCameraSequence.circular_saw_align_X.value
+                    self.is_sequence_finished = False
 
             elif(current_sequence == ParkingCameraSequence.circular_saw_align_X.value):
+                if not self.subscriber.update_target_from_tf():
+                    self.is_sequence_finished = self.Action.CircularStop()
+                    continue
                 self.is_sequence_finished = self.Action.fnControlArmBasedOnFruitX(speed=800)
                 if self.is_sequence_finished:
                     if self.subscriber.sub_detectionConfidence.tag == "bunch":
-                        current_sequence = ParkingCameraSequence.circular_saw_align_marker.value  
+                        # current_sequence = ParkingCameraSequence.circular_saw_align_marker.value
+                        current_sequence = ParkingCameraSequence.circular_saw_run.value  
                     elif self.subscriber.sub_detectionConfidence.tag == "stem":
                         current_sequence = ParkingCameraSequence.circular_saw_run.value  
                     self.is_sequence_finished = False
@@ -136,16 +144,14 @@ class PBVS():
 
             elif(current_sequence == ParkingCameraSequence.circular_saw_run.value):
                 self.subscriber.fnDetectionAllowed(pose_detection=False, det_select_mode="nearest_depth")
-                self.is_sequence_finished = self.Action.SawRunStop(600)  # 啟動鋸片
+                self.is_sequence_finished = self.Action.SawRunStop(1500)  # 啟動鋸片
                 if self.is_sequence_finished:
-                    self.Action._reset_axis_cmd_cache()
                     current_sequence = ParkingCameraSequence.circular_saw_dead_reckoning_extend.value  
                     self.is_sequence_finished = False
 
             elif(current_sequence == ParkingCameraSequence.circular_saw_dead_reckoning_extend.value):
                 self.is_sequence_finished = self.Action.fnBlindExtendArm(speed=800)
                 if self.is_sequence_finished:
-                    self.Action._reset_axis_cmd_cache()
                     rospy.sleep(2)  # 等待2秒
                     current_sequence = ParkingCameraSequence.circular_saw_stop.value  
                     self.is_sequence_finished = False
@@ -153,28 +159,24 @@ class PBVS():
             elif(current_sequence == ParkingCameraSequence.circular_saw_stop.value):
                 self.is_sequence_finished = self.Action.SawRunStop(0)  # 停止鋸片
                 if self.is_sequence_finished:
-                    self.Action._reset_axis_cmd_cache()
                     current_sequence = ParkingCameraSequence.circular_saw_home_length.value  
                     self.is_sequence_finished = False
             
             elif(current_sequence == ParkingCameraSequence.circular_saw_home_length.value):
                 self.is_sequence_finished = self.Action.DeadMoveX(self.subscriber.circular_saw_home_length)
                 if self.is_sequence_finished:
-                    self.Action._reset_axis_cmd_cache()
                     current_sequence = ParkingCameraSequence.circular_saw_home_height.value  
                     self.is_sequence_finished = False
 
             elif(current_sequence == ParkingCameraSequence.circular_saw_home_height.value):
                 self.is_sequence_finished = self.Action.DeadMoveZ(self.subscriber.circular_saw_home_height, z_tolerance=7.0)
                 if self.is_sequence_finished:
-                    self.Action._reset_axis_cmd_cache()
                     current_sequence = ParkingCameraSequence.circular_saw_reset_angle.value
                     self.is_sequence_finished = False
 
             elif(current_sequence == ParkingCameraSequence.circular_saw_reset_angle.value):
                 self.is_sequence_finished = self.Action.DeadRotateAngle(0.0, angle_tolerance=1.0, speed=800)
                 if self.is_sequence_finished:
-                    self.Action._reset_axis_cmd_cache()
                     current_sequence = ParkingCameraSequence.stop.value  
                     self.is_sequence_finished = False
 

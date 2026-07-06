@@ -33,6 +33,16 @@ class Action():
         self._last_cmd_x = None
         self._last_cmd_z = None
         self._last_cmd_angle = None
+
+        # X 視覺對位若已超過停止距離且禁止後退，
+        # 在此鎖定超過量，供後續盲伸距離補償使用。
+        self.x_overshoot_mm = 0.0
+        self._last_cmd_time_x = 0.0
+        self._last_cmd_time_z = 0.0
+
+        # 車體 parking 進入容許帶後的連續穩定計時起點。
+        self._parking_in_tolerance_since = None
+
         # other
         self.check_wait_time = 0
         self.wait_time = 0
@@ -43,22 +53,6 @@ class Action():
 
     def _soft_stop_arm(self):
         self.cmd_vel.fnPauseArm()
-        self._last_cmd_x = None
-        self._last_cmd_z = None
-        self._last_cmd_angle = None
-
-
-    def _reset_axis_cmd_cache(self):
-        """
-        清除上一個 motion phase 的目標記憶。
-        """
-        self._last_cmd_x = None
-        self._last_cmd_z = None
-        self._last_cmd_angle = None
-        self._axis_probe_x = None
-        self._axis_probe_z = None
-        self._visual_probe_x = None
-        self._visual_probe_z = None
 
     def _axis_limits(self, axis_name):
         if axis_name == "X":
@@ -91,68 +85,6 @@ class Action():
 
         return logical_target
 
-    def _auto_check_axis_direction(self, axis_name, cur):
-        """
-        若實際回授方向與預期方向相反，自動切換 X/Z command invert。
-        """
-        auto_attr = "x_auto_invert_enable" if axis_name == "X" else "z_auto_invert_enable"
-        if not bool(getattr(self.Subscriber, auto_attr, True)):
-            return
-
-        probe_attr = "_axis_probe_" + axis_name.lower()
-        probe = getattr(self, probe_attr, None)
-        if not probe:
-            return
-
-        now = time.time()
-        delay = float(getattr(self.Subscriber, "axis_auto_delay_sec", 0.35))
-        min_move = float(getattr(self.Subscriber, "axis_auto_min_move_mm", 2.0))
-
-        if (now - probe["t0"]) < delay:
-            return
-
-        start = float(probe["start"])
-        target = float(probe["target"])
-        cur = float(cur)
-
-        expected = target - start
-        moved = cur - start
-
-        if abs(expected) < 1e-6:
-            setattr(self, probe_attr, None)
-            return
-
-        # 還沒動夠，不判斷，避免馬達剛起步時誤判。
-        if abs(moved) < min_move:
-            return
-
-        if np.sign(moved) != np.sign(expected):
-            old = self._get_axis_invert(axis_name)
-            self._set_axis_invert(axis_name, not old)
-
-            if axis_name == "X":
-                self._last_cmd_x = None
-            else:
-                self._last_cmd_z = None
-
-            rospy.logwarn(
-                f"[{axis_name} AUTO] actual motion opposite to expected: "
-                f"start={start:.1f}, cur={cur:.1f}, logical_target={target:.1f}, "
-                f"moved={moved:.1f}, expected={expected:.1f}. "
-                f"Flip invert and resend next cycle."
-            )
-
-        setattr(self, probe_attr, None)
-
-    def _remember_axis_probe(self, axis_name, start, target):
-        probe_attr = "_axis_probe_" + axis_name.lower()
-        setattr(self, probe_attr, {
-            "t0": time.time(),
-            "start": float(start),
-            "target": float(target),
-            "invert": self._get_axis_invert(axis_name),
-        })
-
     def _get_axis_step_params(self, axis_name):
         """
         小步部署參數，避免每一幀直接下完整視覺誤差造成震盪。
@@ -171,25 +103,6 @@ class Action():
         step_max = min(step_max, global_max)
 
         return step_min, step_max, step_gain
-
-    def _filtered_axis_error_mm(self, axis_name, raw_err_mm):
-        """
-        對 X/Z 視覺誤差做 EMA，降低深度/TF 抖動。
-        """
-        if axis_name == "X":
-            attr = "_x_err_filt_mm"
-            alpha = float(getattr(self.Subscriber, "x_err_ema_alpha", 0.35))
-        else:
-            attr = "_z_err_filt_mm"
-            alpha = float(getattr(self.Subscriber, "z_err_ema_alpha", 0.35))
-
-        if not hasattr(self, attr):
-            setattr(self, attr, float(raw_err_mm))
-        else:
-            prev = float(getattr(self, attr))
-            setattr(self, attr, alpha * float(raw_err_mm) + (1.0 - alpha) * prev)
-
-        return float(getattr(self, attr))
 
     def _make_limited_axis_target(self, axis_name, cur_mm, err_mm, sign_positive_err_to_positive_target):
         """
@@ -222,61 +135,6 @@ class Action():
         attr = "x_visual_sign_invert" if axis_name == "X" else "z_visual_sign_invert"
         setattr(self.Subscriber, attr, bool(value))
         rospy.logwarn(f"[{axis_name} AUTO] visual error sign invert -> {bool(value)}")
-
-    def _auto_check_visual_error_direction(self, axis_name, raw_err_mm, cur_mm):
-        """
-        觀察手臂移動後視覺誤差是否反而變大。
-        若明顯變大，代表 PBVS 視覺誤差與手臂 logical 方向可能相反，
-        自動切換 x_visual_sign_invert / z_visual_sign_invert。
-        """
-        auto_attr = "x_auto_visual_sign_enable" if axis_name == "X" else "z_auto_visual_sign_enable"
-        if not bool(getattr(self.Subscriber, auto_attr, True)):
-            return
-
-        probe_attr = "_visual_probe_" + axis_name.lower()
-        probe = getattr(self, probe_attr, None)
-        if not probe:
-            return
-
-        now = time.time()
-        delay = float(getattr(self.Subscriber, "axis_auto_delay_sec", 0.35))
-        min_move = float(getattr(self.Subscriber, "axis_auto_min_move_mm", 2.0))
-        worsen_margin = float(getattr(self.Subscriber, "axis_auto_worsen_margin_mm", 6.0))
-
-        if (now - probe["t0"]) < delay:
-            return
-
-        moved = abs(float(cur_mm) - float(probe["start_cur"]))
-        if moved < min_move:
-            return
-
-        old_abs = abs(float(probe["start_err"]))
-        new_abs = abs(float(raw_err_mm))
-
-        if new_abs > old_abs + worsen_margin:
-            old = self._get_visual_sign_invert(axis_name)
-            self._set_visual_sign_invert(axis_name, not old)
-
-            if axis_name == "X":
-                self._last_cmd_x = None
-            else:
-                self._last_cmd_z = None
-
-            rospy.logwarn(
-                f"[{axis_name} AUTO] visual error got worse after motion: "
-                f"err_abs {old_abs:.1f} -> {new_abs:.1f}, moved={moved:.1f}mm. "
-                f"Flip visual sign and resend next cycle."
-            )
-
-        setattr(self, probe_attr, None)
-
-    def _remember_visual_probe(self, axis_name, start_err_mm, start_cur_mm):
-        probe_attr = "_visual_probe_" + axis_name.lower()
-        setattr(self, probe_attr, {
-            "t0": time.time(),
-            "start_err": float(start_err_mm),
-            "start_cur": float(start_cur_mm),
-        })
 
     def fnRotateToRelativeLine(self, distance, Kp, v):
         if not getattr(self, "_rot_rel_inited", False):
@@ -461,23 +319,80 @@ class Action():
         return False
 
     def fnSeqParking(self, tolerance, kp):
-        # rospy.loginfo(f'fnSeqParking: {self.marker_2d_pose_y}')
-        if self.TFConfidence():
-            if abs(self.Subscriber.marker_2d_pose_y) > tolerance:
-                # 若偏差超過設定距離，透過前後移動來修正位置
-                self.cmd_vel.fnGoStraight(kp, self.Subscriber.marker_2d_pose_y)
-            else:
-                # 偏差在容忍範圍內，停止前後運動
-                self._soft_stop_arm()
-                if self.check_wait_time > 20:
-                    self.check_wait_time = 0
-                    return True
-                else:
-                    self.check_wait_time += 1
+        """
+        車體 parking 水平對位。
+
+        完成條件：
+        1. marker_2d_pose_y 一進入 tolerance，立即發布零速停止車體。
+        2. 在停止狀態下，連續維持 parking_stable_time_sec 秒都在容許帶內。
+        3. 中途只要離開容許帶，穩定計時立即歸零並重新修正。
+        4. TF / Confidence 中斷時立即停止車體，不能沿用上一筆速度。
+        """
+        tolerance = max(0.0, abs(float(tolerance)))
+        stable_time_sec = max(
+            0.0,
+            float(getattr(self.Subscriber, "parking_stable_time_sec", 2.0))
+        )
+
+        # 視覺失效時必須立刻停止底盤，並取消穩定計時。
+        if not self.TFConfidence():
+            self.cmd_vel.fnStopVehicle()
+            self._parking_in_tolerance_since = None
+            rospy.logwarn_throttle(
+                1.0,
+                "[PARKING] TF/Confidence 不足，車體立即停止並等待有效姿態。"
+            )
             return False
-        else:
-            self.check_wait_time = 0
+
+        err_y_m = float(self.Subscriber.marker_2d_pose_y)
+        now = time.monotonic()
+
+        rospy.loginfo_throttle(
+            0.5,
+            f"[PARKING] err_y={err_y_m:.4f}m, "
+            f"tol={tolerance:.4f}m, kp={kp:.3f}"
+        )
+
+        # 進入容許帶：立刻停止底盤並開始連續穩定計時。
+        if abs(err_y_m) <= tolerance:
+            self.cmd_vel.fnStopVehicle()
+
+            if self._parking_in_tolerance_since is None:
+                self._parking_in_tolerance_since = now
+                rospy.loginfo(
+                    f"[PARKING HOLD] 進入容許帶，車體立即停止。"
+                    f"err={err_y_m:.4f}m，需穩定 {stable_time_sec:.2f}s"
+                )
+
+            held_sec = now - self._parking_in_tolerance_since
+
+            rospy.loginfo_throttle(
+                0.25,
+                f"[PARKING HOLD] err={err_y_m:.4f}m, "
+                f"held={held_sec:.2f}/{stable_time_sec:.2f}s"
+            )
+
+            if held_sec >= stable_time_sec:
+                rospy.loginfo(
+                    f"[PARKING] SUCCESS：連續 {held_sec:.2f}s 位於容許帶內，"
+                    f"err={err_y_m:.4f}m, tol={tolerance:.4f}m"
+                )
+                self.cmd_vel.fnStopVehicle()
+                self._parking_in_tolerance_since = None
+                return True
+
             return False
+
+        # 離開容許帶：清除計時，重新發布修正速度。
+        if self._parking_in_tolerance_since is not None:
+            rospy.logwarn(
+                f"[PARKING HOLD] 離開容許帶，穩定計時歸零。"
+                f"err={err_y_m:.4f}m, tol={tolerance:.4f}m"
+            )
+        self._parking_in_tolerance_since = None
+
+        self.cmd_vel.fnGoStraight(kp, err_y_m)
+        return False
         
     def fnSeqdecide(self, decide_dist, horizontal_dist):#decide_dist偏離多少公分要後退
         if self.TFConfidence():
@@ -563,7 +478,7 @@ class Action():
         同方向的座標。實際送給 controller 前，會依 x_cmd_invert / z_cmd_invert
         自動轉成 controller command target。
 
-        若偵測到實際 state 往預期相反方向移動，會自動切換對應軸的 invert。
+        不做自動反向修正；若方向相反，請在 launch 手動設定 x_cmd_invert / z_cmd_invert。
         """
         st = self.Subscriber.circular_saw_state
         if st is None:
@@ -572,12 +487,9 @@ class Action():
 
         lo, hi = self._axis_limits(axis_name)
         target = self._saturate(float(target), lo, hi)
-
         cur = float(get_cur_fn(st))
 
-        # 自動方向檢查：若上一筆命令造成反向移動，會 flip invert 並清 last command。
-        self._auto_check_axis_direction(axis_name, cur)
-
+        # 不做自動反向修正：X/Z 命令方向只由 launch 內的 x_cmd_invert / z_cmd_invert 決定。
         d = target - cur
 
         # --- 1) 現在位置已經在目標附近 → 視為完成，送一次 Stop ---
@@ -599,30 +511,60 @@ class Action():
 
         if last_cmd is not None:
             remaining_to_last = float(last_cmd) - cur
-
-            # 距離上一次 logical 目標還很遠 → 認為上一筆命令還在執行中，不重發
+            now = time.monotonic()
+            if axis_name == "X":
+                last_cmd_time = self._last_cmd_time_x
+            else:
+                last_cmd_time = self._last_cmd_time_z
+            resend_sec = float(getattr(self.Subscriber, "axis_cmd_resend_sec", 0.3))
+            
+            # 上一筆位置還沒到
             if abs(remaining_to_last) > tolerance_mm:
+                # 尚未到重送時間，繼續等
+                if now - last_cmd_time < resend_sec:
+                    return False
+
+                # 重新發布「上一個目標」，不能改送本輪新算的目標
+                controller_target = self._to_controller_axis_target(axis_name,last_cmd)
+
+                rospy.logwarn_throttle(
+                    0.5,
+                    f"[{axis_name} CMD RESEND] "
+                    f"cur={cur:.1f}mm, "
+                    f"last_target={last_cmd:.1f}mm, "
+                    f"remaining={remaining_to_last:.1f}mm"
+                )
+
+                send_axis_cmd_fn(int(round(controller_target)),speed)
+
+                if axis_name == "X":
+                    self._last_cmd_time_x = now
+                else:
+                    self._last_cmd_time_z = now
+
                 return False
 
             if abs(target - float(last_cmd)) < MIN_CMD_DELTA:
                 return False
 
-        # --- 3) 確定需要新目標 → 做 command mapping 後發送 ---
+        # --- 3) 第一筆命令，或上一筆完成後的新目標 ---
         controller_target = self._to_controller_axis_target(axis_name, target)
 
-        rospy.loginfo_throttle(
-            0.5,
-            f"[{axis_name} CMD MAP] logical={target:.1f}mm -> controller={controller_target:.1f}mm, "
+        rospy.loginfo(
+            f"[{axis_name} CMD MAP] logical={target:.1f}mm -> "
+            f"controller={controller_target:.1f}mm, "
             f"cur={cur:.1f}mm, invert={self._get_axis_invert(axis_name)}"
         )
 
         send_axis_cmd_fn(int(round(controller_target)), speed)
-        self._remember_axis_probe(axis_name, cur, target)
+        now = time.monotonic()
 
         if axis_name == "X":
             self._last_cmd_x = target
+            self._last_cmd_time_x = now
         else:
             self._last_cmd_z = target
+            self._last_cmd_time_z = now
 
         return False
 
@@ -675,15 +617,14 @@ class Action():
             return None
         return st.x_pos + float(delta_x)
 
-
     def fnControlArmBasedOnFruitZ(self, speed=800):
         """
         Z 軸視覺對位。
 
-        設計重點：
-        1. 不再一次部署完整 rel_z，改成小步限幅部署，避免震盪。
-        2. 若 controller command 方向與 state 方向相反，DeadMoveZ 會自動切換 z_cmd_invert。
-        3. 若視覺誤差在移動後反而變大，會自動切換 z_visual_sign_invert。
+        完成條件：
+        1. 一進入 z_tolerance_mm 容許帶，立即送停止命令。
+        2. 在停止狀態下，連續維持 zx_stable_time_sec 秒都在容許帶內。
+        3. 中途只要離開容許帶，穩定計時立即歸零。
         """
         st = self.Subscriber.circular_saw_state
         if st is None:
@@ -691,68 +632,98 @@ class Action():
             return False
 
         if not self.TFConfidence():
+            # 視覺信心不足時，不允許沿用舊命令繼續前進。
+            self._soft_stop_arm()
+            self._z_in_tolerance_since = None
+            self._last_cmd_z = None
             return False
 
         if not getattr(self, "_z_inited", False):
             self._z_inited = True
-            self._z_success_cnt = 0
-            self._z_err_filt_mm = 0.0
+            self._z_in_tolerance_since = None
             self._last_cmd_z = None
-            self._axis_probe_z = None
-            self._visual_probe_z = None
-            rospy.loginfo("[Z] 開始對齊 Z 軸")
 
-        z_tol_mm = float(self.Subscriber.z_tolerance_mm)
+            self.cmd_vel.latch_axes_from_status(latch_x=True,latch_z=False,latch_angle=True)
+            self._z_hold_x_mm = float(self.cmd_vel.target_l_mm)
+
+            rospy.loginfo(f"[Z] 開始對齊 Z 軸，鎖定 X={self._z_hold_x_mm:.1f}mm")
+
+        z_tol_mm = max(0.0, float(self.Subscriber.z_tolerance_mm))
+        stable_time_sec = max(0.0,float(self.Subscriber.zx_stable_time_sec))
+
         raw_rel_z_mm = float(self.Subscriber.marker_2d_pose_z) * 1000.0
         cur_h = float(st.z_pos)
 
-        # 若上一次小步移動後視覺誤差變大，自動反轉視覺誤差符號。
-        self._auto_check_visual_error_direction("Z", raw_rel_z_mm, cur_h)
-
-        # 視覺方向自動修正後的 error。
-        rel_z_for_ctrl = -raw_rel_z_mm if self._get_visual_sign_invert("Z") else raw_rel_z_mm
-        rel_z_mm = self._filtered_axis_error_mm("Z", rel_z_for_ctrl)
+        # 視覺方向設定只影響移動方向，不影響容許帶判斷。
+        rel_z_mm = (
+            -raw_rel_z_mm
+            if self._get_visual_sign_invert("Z")
+            else raw_rel_z_mm
+        )
 
         rospy.loginfo_throttle(
             0.5,
-            f"[Z] raw={raw_rel_z_mm:.1f}mm, ctrl={rel_z_for_ctrl:.1f}mm, "
-            f"filt={rel_z_mm:.1f}mm, tol={z_tol_mm:.1f}mm, cur_z={cur_h:.1f}mm, "
-            f"cmd_inv={self._get_axis_invert('Z')}, vis_inv={self._get_visual_sign_invert('Z')}"
+            f"[Z] raw_err={raw_rel_z_mm:.1f}mm, cmd_err={rel_z_mm:.1f}mm, "
+            f"tol={z_tol_mm:.1f}mm, cur_z={cur_h:.1f}mm, "
+            f"cmd_inv={self._get_axis_invert('Z')}, "
+            f"vis_inv={self._get_visual_sign_invert('Z')}"
         )
 
-        # ------------------------------------------------------------
-        # 1. 如果 Z 已經在容許範圍內，連續穩定數幀後視為完成
-        # ------------------------------------------------------------
-        if abs(raw_rel_z_mm) <= z_tol_mm or abs(rel_z_mm) <= z_tol_mm:
-            self._z_success_cnt += 1
+        now = time.monotonic()
 
-            if self._z_success_cnt >= 3:
+        # ------------------------------------------------------------
+        # 1. 進入容許帶：立即停止；維持一段時間後才完成
+        # ------------------------------------------------------------
+        if abs(raw_rel_z_mm) <= z_tol_mm:
+            self._soft_stop_arm()
+            self._last_cmd_z = None
+
+            if self._z_in_tolerance_since is None:
+                self._z_in_tolerance_since = now
                 rospy.loginfo(
-                    f"[Z] SUCCESS raw={raw_rel_z_mm:.1f}mm, filt={rel_z_mm:.1f}mm "
-                    f"(tol={z_tol_mm:.1f}mm)"
+                    f"[Z HOLD] 進入容許帶，立即停止。"
+                    f"err={raw_rel_z_mm:.1f}mm, "
+                    f"需穩定 {stable_time_sec:.2f}s"
                 )
 
+            held_sec = now - self._z_in_tolerance_since
+
+            rospy.loginfo_throttle(
+                0.25,
+                f"[Z HOLD] err={raw_rel_z_mm:.1f}mm, "
+                f"held={held_sec:.2f}/{stable_time_sec:.2f}s"
+            )
+
+            if held_sec >= stable_time_sec:
+                rospy.loginfo(
+                    f"[Z] SUCCESS：連續 {held_sec:.2f}s 位於容許帶內，"
+                    f"err={raw_rel_z_mm:.1f}mm, tol={z_tol_mm:.1f}mm"
+                )
+                self._soft_stop_arm()
                 self._z_inited = False
-                self._z_success_cnt = 0
+                self._z_in_tolerance_since = None
                 self._last_cmd_z = None
-                self._axis_probe_z = None
-                self._visual_probe_z = None
                 return True
-        else:
-            self._z_success_cnt = 0
+
+            return False
+
+        # 離開容許帶，重新計時。
+        if self._z_in_tolerance_since is not None:
+            rospy.logwarn(
+                f"[Z HOLD] 離開容許帶，穩定計時歸零。"
+                f"err={raw_rel_z_mm:.1f}mm, tol={z_tol_mm:.1f}mm"
+            )
+        self._z_in_tolerance_since = None
 
         # ------------------------------------------------------------
-        # 2. 小步限幅部署
-        #    原本邏輯是 rel_z > 0 -> target = cur - rel_z，
-        #    因此正誤差預設往 logical 負方向修正。
+        # 2. 尚未進入容許帶：採小步限幅部署
+        #    rel_z > 0 時，預設往 logical Z 負方向修正。
         # ------------------------------------------------------------
-        sign_positive_to_positive = False
-
         tgt_h, step = self._make_limited_axis_target(
             "Z",
             cur_h,
             rel_z_mm,
-            sign_positive_err_to_positive_target=sign_positive_to_positive
+            sign_positive_err_to_positive_target=False
         )
 
         rospy.loginfo_throttle(
@@ -761,28 +732,27 @@ class Action():
             f"cur={cur_h:.1f}mm, speed={speed}"
         )
 
-        self._remember_visual_probe("Z", raw_rel_z_mm, cur_h)
-
-        motion_tol_mm = float(getattr(self.Subscriber, "axis_motion_tolerance_mm", 1.0))
-
         self.DeadMoveZ(
             tgt_h,
-            z_tolerance=motion_tol_mm,
+            z_tolerance=float(self.Subscriber.axis_motion_tolerance_mm),
             speed=speed
         )
 
         return False
 
-
     def fnControlArmBasedOnFruitX(self, speed=800):
         """
         X 軸視覺對位。
 
-        設計重點：
-        1. 不再把 fruit_x_m 全部部署成手臂伸長量，而是對
-           fruit_x_m - x_circular_saw_target 做小步部署。
-        2. 若 controller command 方向與 state 方向相反，DeadMoveX 會自動切換 x_cmd_invert。
-        3. 若視覺誤差在移動後反而變大，會自動切換 x_visual_sign_invert。
+        完成條件：
+        1. fruit_x_m 與 x_circular_saw_target 的誤差進入
+           x_tolerance_mm 後，立即送停止命令。
+        2. 在停止狀態下，連續維持 zx_stable_time_sec 秒都在容許帶內。
+        3. 中途只要離開容許帶，穩定計時立即歸零。
+
+        circular_saw_allow_retract=False 時：
+        若已經超過目標且超出容許帶，立即停止、記錄超過量並直接完成；
+        後續盲伸距離會扣除該超過量，不執行反向收回。
         """
         st = self.Subscriber.circular_saw_state
         if st is None:
@@ -790,97 +760,156 @@ class Action():
             return False
 
         if not self.TFConfidence():
+            # 視覺信心不足時，不允許沿用舊命令繼續前進。
+            self._soft_stop_arm()
+            self._x_in_tolerance_since = None
+            self._last_cmd_x = None
             return False
 
         if not getattr(self, "_x_inited", False):
             self._x_inited = True
-            self._x_success_cnt = 0
-            self._x_err_filt_mm = 0.0
+            self._x_in_tolerance_since = None
             self._last_cmd_x = None
-            self._axis_probe_x = None
-            self._visual_probe_x = None
-            rospy.loginfo("[X] 開始對齊 X 軸")
+            self.x_overshoot_mm = 0.0
 
-        x_tol_mm = float(self.Subscriber.x_tolerance_mm)
-        x_stop_m = float(getattr(self.Subscriber, "x_circular_saw_target", 0.25))
+            self.cmd_vel._init_targets_from_status_once()
+
+            # 鎖定 Z 階段最後下達的目標，X 階段不可再用 Z 回授覆寫。
+            self._x_hold_z_mm = float(self.cmd_vel.target_h_mm)
+            self.cmd_vel.target_h_mm = self._x_hold_z_mm
+
+            rospy.loginfo(f"[X] 開始對齊 X 軸，鎖定最後 Z 命令={self._x_hold_z_mm:.1f}mm, 目前 Z 回授={float(st.z_pos):.1f}mm")
+
+        x_tol_mm = max(0.0, float(self.Subscriber.x_tolerance_mm))
+        stable_time_sec = max(0.0,float(self.Subscriber.zx_stable_time_sec))
+
+        x_stop_m = float(self.Subscriber.x_circular_saw_target)
+        allow_retract = bool(self.Subscriber.circular_saw_allow_retract)
 
         fruit_x_m = float(self.Subscriber.marker_2d_pose_x)
         cur_l = float(st.x_pos)
 
-        # X 對位真正要消掉的是「目前距離 - 停止距離」。
+        # 正值：目標仍然太遠；負值：已經比停止距離更近。
         raw_err_mm = (fruit_x_m - x_stop_m) * 1000.0
 
-        # 如果已經過近，直接完成，交給下一階段盲伸。
-        if fruit_x_m <= x_stop_m:
-            rospy.loginfo(
-                f"[X] Too close / reached stop distance: {fruit_x_m:.3f}m ≤ {x_stop_m:.3f}m "
-                "→ 停止視覺對位"
-            )
-            self._x_inited = False
-            self._x_success_cnt = 0
-            self._last_cmd_x = None
-            self._axis_probe_x = None
-            self._visual_probe_x = None
-            return True
-
-        # 若上一次小步移動後視覺誤差變大，自動反轉視覺誤差符號。
-        self._auto_check_visual_error_direction("X", raw_err_mm, cur_l)
-
-        err_for_ctrl = -raw_err_mm if self._get_visual_sign_invert("X") else raw_err_mm
-        rel_x_mm = self._filtered_axis_error_mm("X", err_for_ctrl)
+        # 視覺方向設定只影響移動方向，不影響容許帶判斷。
+        rel_x_mm = (
+            -raw_err_mm
+            if self._get_visual_sign_invert("X")
+            else raw_err_mm
+        )
 
         rospy.loginfo_throttle(
             0.5,
             f"[X] fruit_x={fruit_x_m:.3f}m, stop={x_stop_m:.3f}m, "
-            f"raw_err={raw_err_mm:.1f}mm, ctrl={err_for_ctrl:.1f}mm, "
-            f"filt={rel_x_mm:.1f}mm, tol={x_tol_mm:.1f}mm, cur_x={cur_l:.1f}mm, "
-            f"cmd_inv={self._get_axis_invert('X')}, vis_inv={self._get_visual_sign_invert('X')}"
+            f"raw_err={raw_err_mm:.1f}mm, cmd_err={rel_x_mm:.1f}mm, "
+            f"tol={x_tol_mm:.1f}mm, cur_x={cur_l:.1f}mm, "
+            f"allow_retract={allow_retract}, "
+            f"cmd_inv={self._get_axis_invert('X')}, "
+            f"vis_inv={self._get_visual_sign_invert('X')}"
         )
 
-        # ------------------------------------------------------------
-        # 1. 如果誤差已經在容許範圍內，視為完成
-        # ------------------------------------------------------------
-        if abs(raw_err_mm) <= x_tol_mm or abs(rel_x_mm) <= x_tol_mm:
-            self._x_success_cnt += 1
+        now = time.monotonic()
 
-            if self._x_success_cnt >= 3:
+        # ------------------------------------------------------------
+        # 1. 進入容許帶：立即停止；維持一段時間後才完成
+        # ------------------------------------------------------------
+        if abs(raw_err_mm) <= x_tol_mm:
+            self._soft_stop_arm()
+            self._last_cmd_x = None
+
+            if self._x_in_tolerance_since is None:
+                self._x_in_tolerance_since = now
                 rospy.loginfo(
-                    f"[X] SUCCESS raw_err={raw_err_mm:.1f}mm, filt={rel_x_mm:.1f}mm "
-                    f"(tol={x_tol_mm:.1f}mm)"
+                    f"[X HOLD] 進入容許帶，立即停止。"
+                    f"err={raw_err_mm:.1f}mm, "
+                    f"需穩定 {stable_time_sec:.2f}s"
                 )
 
-                self._x_inited = False
-                self._x_success_cnt = 0
-                self._last_cmd_x = None
-                self._axis_probe_x = None
-                self._visual_probe_x = None
-                return True
-        else:
-            self._x_success_cnt = 0
+            held_sec = now - self._x_in_tolerance_since
 
-        # ------------------------------------------------------------
-        # 2. 防呆：目標跑到相機後方
-        # ------------------------------------------------------------
-        if fruit_x_m < 0:
-            rospy.logwarn("[X] fruit_x < 0，目標在相機後方，視為 X 對位完成")
-            self._x_inited = False
-            self._x_success_cnt = 0
+            rospy.loginfo_throttle(
+                0.25,
+                f"[X HOLD] err={raw_err_mm:.1f}mm, "
+                f"held={held_sec:.2f}/{stable_time_sec:.2f}s"
+            )
+
+            if held_sec >= stable_time_sec:
+                # 即使在容許帶內，若最終位置已比停止距離更近，
+                # 仍記錄殘餘超過量，供盲伸距離扣除。
+                self.x_overshoot_mm = max(0.0, -raw_err_mm)
+
+                rospy.loginfo(
+                    f"[X] SUCCESS：連續 {held_sec:.2f}s 位於容許帶內，"
+                    f"err={raw_err_mm:.1f}mm, tol={x_tol_mm:.1f}mm, "
+                    f"recorded_overshoot={self.x_overshoot_mm:.1f}mm"
+                )
+                self._soft_stop_arm()
+                self._x_inited = False
+                self._x_in_tolerance_since = None
+                self._last_cmd_x = None
+                return True
+
+            return False
+
+        # 離開容許帶，重新計時。
+        if self._x_in_tolerance_since is not None:
+            rospy.logwarn(
+                f"[X HOLD] 離開容許帶，穩定計時歸零。"
+                f"err={raw_err_mm:.1f}mm, tol={x_tol_mm:.1f}mm"
+            )
+        self._x_in_tolerance_since = None
+
+        # 目標在相機後方屬於異常資料，不可直接判定完成。
+        if fruit_x_m < 0.0:
+            self._soft_stop_arm()
             self._last_cmd_x = None
-            self._axis_probe_x = None
-            self._visual_probe_x = None
+            rospy.logwarn_throttle(
+                1.0,
+                f"[X] fruit_x={fruit_x_m:.3f}m < 0，立即停止並等待有效姿態。"
+            )
+            return False
+
+        # 已超過停止距離且超出容許帶；若禁止反向修正：
+        # 1. 立即停止。
+        # 2. 鎖定目前超過量。
+        # 3. 直接視為 X 對位完成，讓流程繼續啟動鋸片與盲伸。
+        # 4. 後續盲伸距離會扣除這個超過量。
+        if raw_err_mm < -x_tol_mm and not allow_retract:
+            self._soft_stop_arm()
+            self.x_overshoot_mm = max(0.0, -raw_err_mm)
+
+            configured_blind_mm = abs(
+                float(self.Subscriber.circular_saw_blind_extend_length)
+            )
+            effective_blind_mm = max(
+                0.0,
+                configured_blind_mm - self.x_overshoot_mm
+            )
+
+            rospy.logwarn(
+                f"[X OVERSHOOT] 已超過停止距離 "
+                f"{self.x_overshoot_mm:.1f}mm，且不允許後退。"
+                f"記錄超過量並直接完成 X 對位；"
+                f"後續盲伸 {configured_blind_mm:.1f} - "
+                f"{self.x_overshoot_mm:.1f} = "
+                f"{effective_blind_mm:.1f}mm。"
+            )
+
+            self._x_inited = False
+            self._x_in_tolerance_since = None
+            self._last_cmd_x = None
             return True
 
         # ------------------------------------------------------------
-        # 3. 小步限幅部署
-        #    預設 err>0 代表目標太遠，需要 logical X 增加。
+        # 2. 尚未進入容許帶：採小步限幅部署
+        #    raw_err > 0 時，預設增加 logical X。
         # ------------------------------------------------------------
-        sign_positive_to_positive = True
-
         tgt_l, step = self._make_limited_axis_target(
             "X",
             cur_l,
             rel_x_mm,
-            sign_positive_err_to_positive_target=sign_positive_to_positive
+            sign_positive_err_to_positive_target=True
         )
 
         rospy.loginfo_throttle(
@@ -889,13 +918,9 @@ class Action():
             f"cur={cur_l:.1f}mm, speed={speed}"
         )
 
-        self._remember_visual_probe("X", raw_err_mm, cur_l)
-
-        motion_tol_mm = float(getattr(self.Subscriber, "axis_motion_tolerance_mm", 1.0))
-
         self.DeadMoveX(
             tgt_l,
-            x_tolerance=motion_tol_mm,
+            x_tolerance=float(self.Subscriber.axis_motion_tolerance_mm),
             speed=speed
         )
 
@@ -906,10 +931,12 @@ class Action():
         盲伸，非阻塞。
 
         流程：
-        1. 第一次呼叫時，鎖定 target = 目前 x_pos + circular_saw_blind_extend_length
-        2. 後續每次呼叫都朝同一個 target 前進
-        3. 到達 target 後回傳 True
-        4. 完成後清除內部狀態，避免下次流程誤用
+        1. 讀取 X 視覺對位鎖定的 x_overshoot_mm。
+        2. 有效盲伸量 = max(0, circular_saw_blind_extend_length - x_overshoot_mm)。
+        3. 第一次呼叫時，鎖定 target = 目前 x_pos + 有效盲伸量。
+        4. 後續每次呼叫都朝同一個 target 前進。
+        5. 到達 target 後回傳 True。
+        6. 完成後清除內部狀態，避免下次流程誤用。
 
         重要修正：
         - 第一次進入盲伸階段時，必須清除 _last_cmd_x。
@@ -929,17 +956,28 @@ class Action():
         L_MIN = float(self.Subscriber.circular_saw_min_length)
         L_MAX = float(self.Subscriber.circular_saw_max_length)
 
-        extra = float(self.Subscriber.circular_saw_blind_extend_length)
+        configured_extra_mm = abs(
+            float(self.Subscriber.circular_saw_blind_extend_length)
+        )
+        overshoot_mm = max(
+            0.0,
+            float(getattr(self, "x_overshoot_mm", 0.0))
+        )
+        effective_extra_mm = max(
+            0.0,
+            configured_extra_mm - overshoot_mm
+        )
 
         # ------------------------------------------------------------
-        # 第一次進入盲伸階段：鎖定目標，只算一次
+        # 第一次進入盲伸階段：鎖定補償後目標，只算一次
         # ------------------------------------------------------------
         if not hasattr(self, "_blind_extend_target"):
             cur_l0 = float(st.x_pos)
 
-            # 正值代表往前盲伸
-            raw_tgt = cur_l0 + abs(extra)
+            # 正值代表往前盲伸；超過量只會減少盲伸，不允許變成反向收回。
+            raw_tgt = cur_l0 + effective_extra_mm
             self._blind_extend_target = self._saturate(raw_tgt, L_MIN, L_MAX)
+            self._blind_extend_effective_extra_mm = effective_extra_mm
 
             # 關鍵修正：
             # 新 motion phase 開始，不能沿用視覺 X 對位留下的 _last_cmd_x
@@ -947,7 +985,10 @@ class Action():
 
             rospy.loginfo(
                 f"BlindExtend(init): cur0={cur_l0:.1f}mm, "
-                f"extra={extra:.1f}mm → target={self._blind_extend_target:.1f}mm"
+                f"configured={configured_extra_mm:.1f}mm, "
+                f"x_overshoot={overshoot_mm:.1f}mm, "
+                f"effective={effective_extra_mm:.1f}mm "
+                f"→ target={self._blind_extend_target:.1f}mm"
             )
 
         cur_l = float(st.x_pos)
@@ -979,6 +1020,8 @@ class Action():
             # 清除 target，避免下一輪流程誤用
             if hasattr(self, "_blind_extend_target"):
                 delattr(self, "_blind_extend_target")
+            if hasattr(self, "_blind_extend_effective_extra_mm"):
+                delattr(self, "_blind_extend_effective_extra_mm")
 
             # 清除 X 指令快取，讓下一階段可以正常發新命令
             self._last_cmd_x = None
@@ -1152,10 +1195,10 @@ class cmd_vel():
             twist.angular.z =0.2
         elif twist.angular.z < -0.2:
             twist.angular.z =-0.2
-        if twist.linear.x > 0 and twist.linear.x < 0.03:
-            twist.linear.x =0.02
-        elif twist.linear.x < 0 and twist.linear.x > -0.03:
-            twist.linear.x =-0.02   
+        if twist.linear.x > 0 and twist.linear.x < 0.02:
+            twist.linear.x =0.01
+        elif twist.linear.x < 0 and twist.linear.x > -0.02:
+            twist.linear.x =-0.01   
 
         if twist.linear.x > 0.2:
             twist.linear.x =0.2
@@ -1177,6 +1220,10 @@ class cmd_vel():
         twist.linear.x = Kp * v
 
         self.cmd_pub(twist)
+
+    def fnStopVehicle(self):
+        """立即發布零速 Twist，停止底盤且覆蓋上一筆 parking 速度。"""
+        self.pub_cmd_vel.publish(Twist())
 
     def fnGoBack(self):
         twist = Twist()
@@ -1203,6 +1250,40 @@ class cmd_vel():
     def _saturate(self, v, lo, hi):
         return max(lo, min(hi, v))
     
+    def latch_axes_from_status(self, latch_x=True, latch_z=True, latch_angle=True):
+        """
+        只在「控制階段切換」時，將指定軸的實際回授鎖成保持目標。
+        重要：此函式不可在每一筆 X/Z 命令前重複呼叫，否則回授延遲、
+        量化誤差或背隙會被反覆寫回絕對位置命令，造成非控制軸漂移。
+        """
+        self._init_targets_from_status_once()
+
+        st = getattr(self.Subscriber, "circular_saw_state", None)
+        if st is None:
+            rospy.logwarn_throttle(1.0, "[ARM HOLD] 尚未取得手臂回授，無法鎖定軸位置")
+            return False
+
+        Z_MIN = float(self.Subscriber.circular_saw_min_height)
+        Z_MAX = float(self.Subscriber.circular_saw_max_height)
+        L_MIN = float(self.Subscriber.circular_saw_min_length)
+        L_MAX = float(self.Subscriber.circular_saw_max_length)
+        A_MIN = float(self.Subscriber.circular_saw_min_angle)
+        A_MAX = float(self.Subscriber.circular_saw_max_angle)
+
+        if latch_x:
+            self.target_l_mm = float(int(round(self._saturate(float(st.x_pos), L_MIN, L_MAX))))
+        if latch_z:
+            self.target_h_mm = float(int(round(self._saturate(float(st.z_pos), Z_MIN, Z_MAX))))
+        if latch_angle:
+            self.target_angle = self._saturate(float(st.angle), A_MIN, A_MAX)
+
+        rospy.loginfo(
+            f"[ARM HOLD LATCH] X={self.target_l_mm:.1f}mm, "
+            f"Z={self.target_h_mm:.1f}mm, angle={self.target_angle:.1f}deg, "
+            f"latch_x={latch_x}, latch_z={latch_z}, latch_angle={latch_angle}"
+        )
+        return True
+
     def _init_targets_from_status_once(self):
         """
         第一次使用時，從 circular_saw_state 把實際位置抄成目標值，
@@ -1255,15 +1336,9 @@ class cmd_vel():
         """只動 Z 軸"""
         self._init_targets_from_status_once()
 
-        # 鎖死 X 軸與角度
-        st = getattr(self.Subscriber, "circular_saw_state", None)
-        if st is not None:
-            self.target_l_mm = st.x_pos
-            self.target_angle = st.angle
-
         Z_MIN = float(self.Subscriber.circular_saw_min_height)
         Z_MAX = float(self.Subscriber.circular_saw_max_height)
-        self.target_h_mm = self._saturate(float(target_mm), Z_MIN, Z_MAX)
+        self.target_h_mm = float(int(round(self._saturate(float(target_mm), Z_MIN, Z_MAX))))
 
         msg = CircularSawCmd()
         msg.x_pos = int(round(self.target_l_mm))
@@ -1277,19 +1352,19 @@ class cmd_vel():
 
         self.arm_control_pub.publish(msg)
 
+        st = getattr(self.Subscriber, "circular_saw_state", None)
+        if st is not None:
+            z_feedback = float(st.z_pos)
+
+            rospy.loginfo_throttle(0.5,f"[X ABS CMD] X_cmd={msg.x_pos}mm, Z_hold={msg.z_pos}mm, Z_feedback={z_feedback:.1f}mm, Z_track_err={z_feedback - float(msg.z_pos):+.1f}mm")
+
     def fnSawForwardBackward(self, target_mm, speed=2000):
         """只動 X 軸"""
         self._init_targets_from_status_once()
 
-        # 鎖死 Z 軸與角度
-        st = getattr(self.Subscriber, "circular_saw_state", None)
-        if st is not None:
-            self.target_h_mm = st.z_pos
-            self.target_angle = st.angle
-
         L_MIN = float(self.Subscriber.circular_saw_min_length)
         L_MAX = float(self.Subscriber.circular_saw_max_length)
-        self.target_l_mm = self._saturate(float(target_mm), L_MIN, L_MAX)
+        self.target_l_mm = float(int(round(self._saturate(float(target_mm), L_MIN, L_MAX))))
 
         msg = CircularSawCmd()
         msg.x_pos = int(round(self.target_l_mm))
@@ -1304,24 +1379,19 @@ class cmd_vel():
         self.arm_control_pub.publish(msg)
 
     def fnSawRotate(self, target_angle, speed=2000):
-        """只轉角度"""
+        """只轉角度；X/Z 沿用已鎖定的命令目標。"""
         self._init_targets_from_status_once()
-
-        # 鎖死 X 軸與 Z 軸
-        st = getattr(self.Subscriber, "circular_saw_state", None)
-        if st is not None:
-            self.target_l_mm = st.x_pos
-            self.target_h_mm = st.z_pos
 
         C_MIN = float(self.Subscriber.circular_saw_min_angle)
         C_MAX = float(self.Subscriber.circular_saw_max_angle)
-        self.target_angle = self._saturate(float(target_angle), C_MIN, C_MAX)
+
+        self.target_angle = self._saturate(float(target_angle),C_MIN,C_MAX)
 
         msg = CircularSawCmd()
         msg.x_pos = int(round(self.target_l_mm))
         msg.z_pos = int(round(self.target_h_mm))
         msg.angle = float(self.target_angle)
-        
+
         msg.x_speed = int(speed)
         msg.z_speed = int(speed)
         msg.saw_speed = int(self.target_saw_speed)
@@ -1332,13 +1402,6 @@ class cmd_vel():
     def fnSawRunStop(self, saw_speed=0, speed=2000):
         """只控制鋸片轉速"""
         self._init_targets_from_status_once()
-
-        # 鎖死所有平移與轉向位置
-        st = getattr(self.Subscriber, "circular_saw_state", None)
-        if st is not None:
-            self.target_l_mm = st.x_pos
-            self.target_h_mm = st.z_pos
-            self.target_angle = st.angle
 
         S_MIN = 0
         S_MAX = float(self.Subscriber.circular_saw_max_saw_speed)
@@ -1362,12 +1425,6 @@ class cmd_vel():
         保留當前鋸片轉速不變
         """
         self._init_targets_from_status_once()
-
-        st = getattr(self.Subscriber, "circular_saw_state", None)
-        if st is not None:
-            self.target_l_mm = st.x_pos
-            self.target_h_mm = st.z_pos
-            self.target_angle = st.angle
 
         msg = CircularSawCmd()
         msg.x_pos = int(round(self.target_l_mm))

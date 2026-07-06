@@ -4,18 +4,14 @@
 
     <!--megapose-->
     <!-- <include file="$(find visp_megapose)/launch/megapose_client_oilpalm.launch"/> -->
-
-    <node pkg="tf" type="static_transform_publisher" name="bunch_cut_offset" 
-      args="0.0 0.05 0.06 0 0 0 oilpalm oilpalm_cut_target 10" />
-
-    <node pkg="tf" type="static_transform_publisher" name="stem_cut_offset" 
-      args="0.0 0.05 0.06 0 0 0 stem stem_cut_target 10" />
+    
+    <node pkg="tf" type="static_transform_publisher" name="camera_to_saw_cut_point" 
+      args="-0.03 0.06 0.03 0 0 0 camera_color_optical_frame saw_cut_point 10" />
 
     <node pkg="circular_server" type="PBVS_server_differential.py" name="PBVS_server" output="screen">
         <!--Subscriber Topic setting/-->
         <param name="odom" value="/wheel_odom" /><!--里程計 Topic（map -> base_link, 是tf相對關係, 非輪式里程計）/-->
         <param name="pose_topic" value="/FFB_state" /><!--相機對位的 Topic/-->
-        <param name="object_filter" value="False" /><!--(True: , False: )/-->
         <param name="confidence_minimum" value="0.2" /><!--foundationpose信心值低於它停止動作/-->
         <param name="arm_status_topic" value="/circular_saw_state" /><!--圓鋸狀態 Topic/-->
         <param name="arm_control_topic" value="/circular_saw_cmd" /><!--圓鋸控制指令 Topic/-->
@@ -27,31 +23,41 @@
         <param name="camera_base_pitch" type="double" value="0.0" />
         <param name="camera_base_roll" type="double" value="-1.57" />
 
-        <param name="bunch_cut_height_comp_mm" type="double" value="0.0" />
+        <!-- PBVS 統一以鋸片切割點為參考：saw_cut_point -> target -->
+        <param name="saw_cut_frame" value="saw_cut_point" />
+        <param name="bunch_target_frame" value="oilpalm" />
+        <param name="stem_target_frame" value="stem" />
+
+        <param name="bunch_z_axis_sign" type="double" value="-1.0" />
+        <param name="stem_z_axis_sign" type="double" value="-1.0" />
+
+        <param name="bunch_cut_height_comp_mm" type="double" value="-10.0" />
         <param name="stem_cut_height_comp_mm" type="double" value="0.0" />
-        <!-- 切割高度補償mm。正值 = 切割點往上；負值 = 切割點往下 -->
+        <param name="bunch_y_comp_mm" type="double" value="-50.0" />
+        <param name="stem_y_comp_mm" type="double" value="-50.0" />
+        <!-- TF 已包含相機到鋸片外參；*_comp_mm 僅保留給量測後的殘餘校正，預設為 0 -->
 
         <!--camera parking setting-->
         <param name="camera_desired_dist_threshold" type="double" value = "0.35" />  <!--距離目標點的直線距離小於threshold，就不執行move_nearby_parking_lot動作-->
-        <param name="camera_horizon_alignment_threshold" type="double" value = "0.02" />  <!--車體相機水平對齊偏差容許距離（公尺）/-->
+        <param name="camera_horizon_alignment_threshold" type="double" value = "0.01" />  <!--車體相機水平對齊偏差容許距離（公尺）/-->
+        <param name="parking_stable_time_sec" type="double" value="3.0" /> <!--進入 parking 容許帶後，連續維持此秒數才完成-->
     
         <!--Cut pliers (arm) control settings/-->
         <param name="spin_forward_comp" type="double" value="0.02"/><!-- 旋轉造成的前向補償 (m)，相機在左/右都適用 -->
         
-        <!-- Anti-overshoot（mm） -->
-        <param name="marker_to_mm" value="1000.0"/><!-- 相機 Pose 單位轉換：若 Pose 為 m，設 1000；若 Pose 已是 mm，設 1 -->
-        
-        <param name="z_lead_near_mm" value="6.0"/><!-- 預停距離：當前目標與預停點距離小於此值，直接移動到目標 -->
-        <param name="z_lead_far_mm" value="12.0"/><!-- 預停距離：當前目標與預停點距離大於此值，使用遠距離預停距離 -->
-        <param name="z_lead_switch_mm" value="10.0"/><!-- 預停距離切換點：當前目標與預停點距離大於此值，使用遠距離預停距離 -->
-        <param name="z_step_max_mm" type="double" value="10.0" /><!-- 最大步進距離：每次移動的最大距離 -->
+        <!-- X/Z 命令方向與視覺誤差方向 -->
+        <param name="x_cmd_invert" type="bool" value="false" />
+        <param name="z_cmd_invert" type="bool" value="false" />
+        <param name="x_visual_sign_invert" type="bool" value="false" />
+        <param name="z_visual_sign_invert" type="bool" value="false" />
 
-        <param name="x_lead_near_mm" value="10.0"/><!-- 預停距離：當前目標與預停點距離小於此值，直接移動到目標 -->
-        <param name="x_lead_far_mm" value="20.0"/><!-- 預停距離：當前目標與預停點距離大於此值，使用遠距離預停距離 -->
-        <param name="x_lead_switch_mm" value="20.0"/><!-- 預停距離切換點：當前目標與預停點距離大於此值，使用遠距離預停距離 -->
-        <param name="x_step_max_mm" type="double" value="12.0" /><!-- 最大步進距離：每次移動的最大距離 -->
+        <!-- 進入容許帶後立即停止，連續維持此秒數才判定完成 -->
+        <param name="zx_stable_time_sec" type="double" value="3.0" />
+        <!--  -->
+        <param name="axis_cmd_resend_sec" type="double" value="0.3" />
 
-        <param name="zx_stable_frames" value="5"/>
+        <!-- 上一個 X/Z 小步命令的位置完成容許值 -->
+        <param name="axis_motion_tolerance_mm" type="double" value="1.0" />
 
         <!-- 安全行程（mm） -->
         <param name="circular_saw_min_height" value="0.0"/><!-- Z最小(最高) -->
@@ -62,44 +68,23 @@
         <param name="circular_saw_max_angle" value="90.0"/><!--手臂最大角度/-->
         <param name="circular_saw_max_saw_speed" value="6000.0"/><!--圓鋸最大轉速RPM/-->
         
-        <param name="z_tolerance_mm" value="5.0" /><!--Z 軸容許誤差（用於 fnControlArmBasedOnFruitZ）/-->
-        <param name="z_step_min_mm" type="double" value="2.0" /><!--手臂高度調整最小步長（用於 fnControlArmBasedOnFruitZ）/-->
-        <param name="z_step_max_mm" type="double" value="10.0" /><!--手臂高度調整最大步長（用於 fnControlArmBasedOnFruitZ）/-->
+        <param name="z_tolerance_mm" value="7.0" /><!--Z 軸容許誤差（用於 fnControlArmBasedOnFruitZ）/-->
+        <param name="z_step_min_mm" type="double" value="1.0" /><!--手臂高度調整最小步長（用於 fnControlArmBasedOnFruitZ）/-->
+        <param name="z_step_max_mm" type="double" value="5.0" /><!--手臂高度調整最大步長（用於 fnControlArmBasedOnFruitZ）/-->
         <param name="z_step_gain" type="double" value="0.30" /><!--手臂高度調整步長增益（用於 fnControlArmBasedOnFruitZ）/-->
 
         <param name="circular_saw_allow_retract" value="false" /><!--是否允許手臂後退（用於 fnControlArmBasedOnFruitX）/-->
-        <param name="x_tolerance_mm" value="5.0" /><!--X 軸容許誤差（用於 fnControlArmBasedOnFruitX）/-->
-        <param name="x_step_min_mm" type="double" value="2.0" /><!--手臂長度調整最小步長（用於 fnControlArmBasedOnFruitX）/-->
-        <param name="x_step_max_mm" type="double" value="12.0" /><!--手臂長度調整最大步長（用於 fnControlArmBasedOnFruitX）/-->
+        <param name="x_tolerance_mm" value="7.0" /><!--X 軸容許誤差（用於 fnControlArmBasedOnFruitX）/-->
+        <param name="x_step_min_mm" type="double" value="1.0" /><!--手臂長度調整最小步長（用於 fnControlArmBasedOnFruitX）/-->
+        <param name="x_step_max_mm" type="double" value="5.0" /><!--手臂長度調整最大步長（用於 fnControlArmBasedOnFruitX）/-->
         <param name="x_step_gain" type="double" value="0.30" /><!--手臂長度調整步長增益（用於 fnControlArmBasedOnFruitX）/-->
 
         <!-- X/Z 視覺伺服小步部署與自動方向修正 -->
-        <param name="visual_servo_step_max_mm" type="double" value="12.0" />
+        <param name="visual_servo_step_max_mm" type="double" value="5.0" />
 
-        <!-- command 方向初始值；若實際動作方向相反，程式會自動翻轉 -->
-        <param name="x_cmd_invert" type="bool" value="false" />
-        <param name="z_cmd_invert" type="bool" value="false" />
-        <param name="x_auto_invert_enable" type="bool" value="true" />
-        <param name="z_auto_invert_enable" type="bool" value="true" />
-
-        <!-- 視覺誤差方向初始值；若越修越遠，程式會自動翻轉 -->
-        <param name="x_visual_sign_invert" type="bool" value="false" />
-        <param name="z_visual_sign_invert" type="bool" value="false" />
-        <param name="x_auto_visual_sign_enable" type="bool" value="true" />
-        <param name="z_auto_visual_sign_enable" type="bool" value="true" />
-
-        <!-- 自動判斷方向的觀察條件 -->
-        <param name="axis_auto_delay_sec" type="double" value="0.35" />
-        <param name="axis_auto_min_move_mm" type="double" value="2.0" />
-        <param name="axis_auto_worsen_margin_mm" type="double" value="6.0" />
-
-        <!-- 視覺誤差濾波，避免 pose / depth 抖動直接造成手臂來回 -->
-        <param name="x_err_ema_alpha" type="double" value="0.35" />
-        <param name="z_err_ema_alpha" type="double" value="0.35" />
-
-        <param name="x_circular_saw_target" type="double" value="0.2" /><!--水果 X 軸目標值（用於 fnControlArmBasedOnFruitX）/-->
-        <param name="circular_saw_blind_extend_length" type="double" value="200.0" /><!--盲伸的額外長度（用於 DeadMoveX）/-->
-        <param name="circular_saw_home_length" type="double" value="10.0" /><!--手臂回原長度（GoHome）/-->
-        <param name="circular_saw_home_height" type="double" value="170.0" /><!--手臂回原高度（GoHome）/-->
+        <param name="x_circular_saw_target" type="double" value="0.15" /><!--水果 X 軸目標值（用於 fnControlArmBasedOnFruitX）/-->
+        <param name="circular_saw_blind_extend_length" type="double" value="150.0" /><!--盲伸的額外長度（用於 DeadMoveX）/-->
+        <param name="circular_saw_home_length" type="double" value="0.0" /><!--手臂回原長度（GoHome）/-->
+        <param name="circular_saw_home_height" type="double" value="110.0" /><!--手臂回原高度（GoHome）/-->
     </node>
 </launch>
