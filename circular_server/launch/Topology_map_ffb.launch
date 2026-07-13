@@ -1,0 +1,26 @@
+<launch>
+<node pkg="circular_server" type="Topology_map_server.py" name="TopologyMap_server" output="screen">
+    <!--里程計 Topic（map -> base_link, 是tf相對關係, 非輪式里程計）/-->
+    <param name="pub_name" value="/robot_pose" />
+    <param name="target_frame_id" value="map" />
+    <param name="source_frame_id" value="base_link" />
+    <param name="start_node" value="P1" />
+    <rosparam param= "graph">
+    {
+        "P1": {"P2": 1},
+        "P2": {"P3": 1},
+        "P3": {"P4": 1},
+        "P4": {"P4": 1}
+    }
+    </rosparam>
+    <rosparam param= "waypoints">
+    {
+        "P1": [-21.219, -4.589, 0.715, 0.699],
+        
+        "P2": [-21.347, -2.575, 0.682, 0.731],
+        "P3": [-21.347, -2.575, 0.048, 0.999],
+        "P4": [-18.701, -2.196, -0.002, 0.999]
+    }
+    </rosparam>
+</node>
+</launch>
