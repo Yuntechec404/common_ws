@@ -44,6 +44,7 @@ class Subscriber():
         self.arm_control_topic = rospy.get_param(rospy.get_name() + "/arm_control_topic", "/cmd_circular_saw")
         # Harvest done signal (separate from pause/resume)
         self.harvest_done_topic = rospy.get_param(rospy.get_name() + "/harvest_done_topic", self.pose_topic + "_harvest_done")
+        self.pub_name = rospy.get_param(rospy.get_name() + "/pub_name", "/robot_pose")
 
         self.camera_base_x = rospy.get_param(rospy.get_name() + "/camera_base_x", 0.3)
         self.camera_base_y = rospy.get_param(rospy.get_name() + "/camera_base_y", 0.1)
@@ -72,6 +73,7 @@ class Subscriber():
         rospy.loginfo("arm_status_topic: {}, type: {}".format(self.arm_status_topic, type(self.arm_status_topic)))
         rospy.loginfo("arm_control_topic: {}, type: {}".format(self.arm_control_topic, type(self.arm_control_topic)))
         rospy.loginfo("harvest_done_topic: {}, type: {}".format(self.harvest_done_topic, type(self.harvest_done_topic)))
+        rospy.loginfo("pub_name: {}, type: {}".format(self.pub_name, type(self.pub_name)))
         rospy.loginfo("saw_cut_frame: %s", self.saw_cut_frame)
         rospy.loginfo("bunch_target_frame: %s", self.bunch_target_frame)
         rospy.loginfo("stem_target_frame: %s", self.stem_target_frame)
@@ -98,10 +100,21 @@ class Subscriber():
             rospy.get_name() + "/parking_stable_time_sec", 2.0
         )
 
+        # Nearby dead-reckoning pose source.
+        # Valid values:
+        #   map  -> turn / straight / return turn all use robot_map_*
+        #   odom -> turn / straight / return turn all use robot_2d_*
+        # This setting is fixed for every Nearby execution; there is no automatic fallback.
+        self.nearby_pose_source = str(rospy.get_param(rospy.get_name() + "/nearby_pose_source", "map")).strip().lower()
+        if self.nearby_pose_source not in ("map", "odom"):
+            rospy.logwarn("Invalid nearby_pose_source=%r; fallback to 'map'.",self.nearby_pose_source,)
+            self.nearby_pose_source = "map"
+
         rospy.loginfo("Get camera parking parameter")
         rospy.loginfo("camera_desired_dist_threshold: {}, type: {}".format(self.camera_desired_dist_threshold, type(self.camera_desired_dist_threshold)))
         rospy.loginfo("camera_horizon_alignment_threshold: {}, type: {}".format(self.camera_horizon_alignment_threshold, type(self.camera_horizon_alignment_threshold)))
         rospy.loginfo("parking_stable_time_sec: {}, type: {}".format(self.parking_stable_time_sec, type(self.parking_stable_time_sec)))
+        rospy.loginfo("nearby_pose_source: %s", self.nearby_pose_source)
 
         # Cut pliers (arm) control settings
         self.spin_forward_comp = rospy.get_param(rospy.get_name() + "/spin_forward_comp", 0.0)
@@ -206,11 +219,17 @@ class Subscriber():
         # arm_param
         self.circular_saw_state = None
         self.last_command = None  # 上次命令記錄
+        self.is_map_pose_received = False  # 是否已收到 MapToBaselink 資料
+        self.robot_map_pose_x = 0.0
+        self.robot_map_pose_y = 0.0
+        self.robot_map_theta = 0.0
+        self.previous_robot_map_theta = 0.0
+        self.total_robot_map_theta = 0.0
     
     def create_subscriber_publisher(self):
         # Tracker is unified now: it publishes ONLY forklift_msg/Confidence on `self.pose_topic`.
         # PBVS should subscribe to that unified topic and obtain pose from Confidence.position/orientation.
-
+        self.sub_map_robot = rospy.Subscriber(self.pub_name, Pose, self.cbGetRobotMap, queue_size = 1)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.cbGetOdom, queue_size = 1)
         self.pub_cmd_vel = rospy.Publisher('/cmd_vel', Twist, queue_size = 1, latch=True)
 
@@ -267,7 +286,7 @@ class Subscriber():
             "camera_color_optical_frame", # 子坐標系名稱
             "base_link"                  # 父坐標系名稱
         )
-    
+
     def cmd_circular_saw(self, msg):
 
         if self.circular_saw_state is None:
@@ -524,6 +543,46 @@ class Subscriber():
     def SpinOnce_confidence(self):
         return self.sub_detectionConfidence
 
+    def cbGetRobotMap(self, msg):
+        """
+        接收 MapToBaselink (/robot_pose) 的資料，轉換並儲存為 2D 座標與角度
+        """
+        try:
+            self.is_map_pose_received = True # 防呆旗標
+            
+            self.robot_map_pose_x = msg.position.x
+            self.robot_map_pose_y = msg.position.y
+            
+            # 從四元數轉換為 Yaw 角 (Theta)
+            quaternion = (msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w)
+            theta = tf.transformations.euler_from_quaternion(quaternion)[2]
+            
+            # 保持角度在 0 ~ 2*pi 之間
+            if theta < 0:
+                theta = theta + math.pi * 2
+            if theta > math.pi * 2:
+                theta = theta - math.pi * 2
+                
+            self.robot_map_theta = theta
+            
+            # 計算連續旋轉的總角度 (處理跨越 360 度的跳變)
+            if (self.robot_map_theta - self.previous_robot_map_theta) > math.pi:
+                d_theta = (self.robot_map_theta - self.previous_robot_map_theta) - 2 * math.pi
+            elif (self.robot_map_theta - self.previous_robot_map_theta) < -math.pi:
+                d_theta = (self.robot_map_theta - self.previous_robot_map_theta) + 2 * math.pi
+            else:
+                d_theta = (self.robot_map_theta - self.previous_robot_map_theta)
+
+            self.total_robot_map_theta = self.total_robot_map_theta + d_theta
+            self.previous_robot_map_theta = self.robot_map_theta
+            
+            # 將最終用來計算的角度設為累加後的總角度
+            self.robot_map_theta = self.total_robot_map_theta
+            
+        except Exception as e:
+            self.is_map_pose_received = False
+            rospy.logwarn(f"Error in cbGetRobotMap: {e}")
+            
     def cbGetOdom(self, msg):
         if self.is_odom_received == False:
             self.is_odom_received = True 

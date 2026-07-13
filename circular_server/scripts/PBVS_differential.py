@@ -59,7 +59,6 @@ class PBVS():
         # 哪些階段需要依賴視覺TF
         vision_required_sequences = [
             ParkingCameraSequence.initial_marker.value,
-            ParkingCameraSequence.move_nearby_parking_lot.value,
             ParkingCameraSequence.parking.value,
             ParkingCameraSequence.decide.value,
             ParkingCameraSequence.circular_saw_align_Z.value,
@@ -136,14 +135,14 @@ class PBVS():
                     self.is_sequence_finished = False
 
             elif current_sequence == ParkingCameraSequence.circular_saw_align_marker.value:
-                self.subscriber.fnDetectionAllowed(pose_detection=True, det_select_mode="nearest_depth")
+                self.subscriber.fnDetectionAllowed(pose_detection=True, det_select_mode="middle")
                 self.is_sequence_finished = self.Action.fnAlignSawToMarker(speed=800)
                 if self.is_sequence_finished:
                     current_sequence = ParkingCameraSequence.circular_saw_run.value
                     self.is_sequence_finished = False
 
             elif(current_sequence == ParkingCameraSequence.circular_saw_run.value):
-                self.subscriber.fnDetectionAllowed(pose_detection=False, det_select_mode="nearest_depth")
+                self.subscriber.fnDetectionAllowed(pose_detection=False, det_select_mode="middle")
                 self.is_sequence_finished = self.Action.SawRunStop(1500)  # 啟動鋸片
                 if self.is_sequence_finished:
                     current_sequence = ParkingCameraSequence.circular_saw_dead_reckoning_extend.value  

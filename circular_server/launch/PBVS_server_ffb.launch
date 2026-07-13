@@ -15,6 +15,8 @@
         <param name="confidence_minimum" value="0.2" /><!--foundationpose信心值低於它停止動作/-->
         <param name="arm_status_topic" value="/circular_saw_state" /><!--圓鋸狀態 Topic/-->
         <param name="arm_control_topic" value="/circular_saw_cmd" /><!--圓鋸控制指令 Topic/-->
+        <param name="pub_name" value="/robot_pose" /><!--MapToBaselink，轉換並儲存為2D座標與角度Topic/-->
+        <param name="nearby_pose_source" value="map" />
 
         <param name="camera_base_x" type="double" value="0.15" />
         <param name="camera_base_y" type="double" value="-0.08" />

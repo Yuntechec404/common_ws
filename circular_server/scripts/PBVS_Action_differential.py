@@ -48,6 +48,14 @@ class Action():
         self.wait_time = 0
         self.is_triggered = False
 
+        # Nearby 專用狀態：pose 來源由 ROS 參數 nearby_pose_source 固定指定。
+        # 可選 map 或 odom；Nearby 執行期間與不同輪次都不自動 fallback。
+        # 既有 fnseqDeadReckoning* 不修改，其他流程仍維持原本 odom 控制。
+        self._nearby_angle_inited = False
+        self._nearby_dist_inited = False
+        self._nearby_fp_reset_sent = False
+        self._nearby_pose_source = None
+
     def _saturate(self, v, lo, hi):
         return max(lo, min(hi, v))
 
@@ -237,85 +245,291 @@ class Action():
             self.check_wait_time = 0
             return False
         
-    def fnSeqMovingNearbyParkingLot(self,desired_dist_threshold):
-        Kp = 0.2
-        err = 0.05
-        if self.current_nearby_sequence != self.previous_nearby_sequence:
-            rospy.loginfo('current_nearby_sequence {0}'.format(self.NearbySequence(self.current_nearby_sequence)))
-            self.previous_nearby_sequence = self.current_nearby_sequence  # 更新 previous_sequence
+    def _get_nearby_map_pose(self):
+        """取得 map pose；尚未收到時回傳 None。"""
+        if not bool(getattr(self.Subscriber, "is_map_pose_received", False)):
+            return None
 
-        if self.current_nearby_sequence == self.NearbySequence.initial_dist.value:
-            if self.TFConfidence():
-                self.initial_robot_pose_theta = self.Subscriber.robot_2d_theta
-                self.initial_robot_pose_x = self.Subscriber.robot_2d_pose_x
-                self.initial_robot_pose_y = self.Subscriber.robot_2d_pose_y
+        required = (
+            "robot_map_pose_x",
+            "robot_map_pose_y",
+            "robot_map_theta",
+        )
+        if not all(hasattr(self.Subscriber, name) for name in required):
+            return None
 
-                self.initial_marker_pose_theta = self.TrustworthyMarker2DTheta(5)
-                self.initial_marker_pose_x = self.Subscriber.marker_2d_pose_x
-                self.initial_marker_pose_y = self.Subscriber.marker_2d_pose_y
-                self.desired_dist_diff = abs(self.initial_marker_pose_x) - desired_dist_threshold
-                rospy.loginfo(f'desired_dist_diff:{self.desired_dist_diff}')
-                if abs(self.initial_marker_pose_x) <= desired_dist_threshold:
-                    return True
-                else:
-                    # 依 TF tree 判斷相機側別：
-                    # base_link +Y = 左側，-Y = 右側
-                    camera_side, camera_y = self.Subscriber.get_camera_side_from_tf()
+        return (
+            float(self.Subscriber.robot_map_pose_x),
+            float(self.Subscriber.robot_map_pose_y),
+            float(self.Subscriber.robot_map_theta),
+        )
 
-                    if camera_side == "right":
-                        self.first_turn_deg = 90
-                    elif camera_side == "left":
-                        self.first_turn_deg = -90
-                    else:
-                        # 相機接近車體中心線時，預設沿用右側策略
-                        rospy.logwarn(f"[PBVS] camera_y={camera_y:.3f}m 接近中心線，預設使用 right-side turn strategy")
-                        self.first_turn_deg = 90
+    def _get_nearby_odom_pose(self):
+        """取得 odom pose；尚未收到時回傳 None。"""
+        if not bool(getattr(self.Subscriber, "is_odom_received", False)):
+            return None
 
-                    self.second_turn_deg = -self.first_turn_deg
-                    rospy.loginfo(
-                        f"[PBVS] camera_side from TF = {camera_side}, "
-                        f"camera_y={camera_y:.3f}m, "
-                        f"first_turn_deg={self.first_turn_deg}, "
-                        f"second_turn_deg={self.second_turn_deg}"
-                    )
+        required = (
+            "robot_2d_pose_x",
+            "robot_2d_pose_y",
+            "robot_2d_theta",
+        )
+        if not all(hasattr(self.Subscriber, name) for name in required):
+            return None
 
-                    self.current_nearby_sequence = self.NearbySequence.turn_right.value
-            # 若無觀測信心則維持等待
+        return (
+            float(self.Subscriber.robot_2d_pose_x),
+            float(self.Subscriber.robot_2d_pose_y),
+            float(self.Subscriber.robot_2d_theta),
+        )
+
+    def _select_nearby_pose_source(self):
+        """
+        map：整段 Nearby 一律使用 robot_map_*。
+        odom：整段 Nearby 一律使用 robot_2d_*。
+        """
+        configured = str(getattr(self.Subscriber, "nearby_pose_source", "map")).strip().lower()
+
+        if configured not in ("map", "odom"):
+            rospy.logerr_throttle(1.0,f"[NEARBY] invalid nearby_pose_source={configured!r}; allowed values are 'map' and 'odom'. Vehicle stopped.")
+            self._nearby_pose_source = None
+            return None
+
+        # 每次 Nearby 都使用同一個設定；保留 lock 只為避免階段間狀態不一致。
+        if self._nearby_pose_source != configured:
+            self._nearby_pose_source = configured
+            rospy.logwarn(f"[NEARBY] fixed pose source: {configured.upper()}")
+
+        return self._nearby_pose_source
+
+    def _get_nearby_pose(self):
+        """依已鎖定的 Nearby pose source 取得目前位置。"""
+        if self._nearby_pose_source == "map":
+            return self._get_nearby_map_pose()
+        if self._nearby_pose_source == "odom":
+            return self._get_nearby_odom_pose()
+        return None
+
+    def _reset_nearby_motion_state(self, clear_source=False):
+        """清除 Nearby dead-reckoning 階段狀態。"""
+        self._nearby_angle_inited = False
+        self._nearby_dist_inited = False
+
+        if clear_source:
+            self._nearby_pose_source = None
+
+    def fnseqDeadReckoningAngleNearby(self, target_angle):
+        """Nearby 專用旋轉控制，使用已鎖定的 map 或 odom pose。"""
+        pose = self._get_nearby_pose()
+        source = self._nearby_pose_source or "unknown"
+
+        if pose is None:
+            self.cmd_vel.fnStopVehicle()
+            rospy.logwarn_throttle(
+                1.0,
+                f"[NEARBY {source.upper()}] pose unavailable during angle control; "
+                "vehicle stopped. Pose source will not switch mid-motion."
+            )
             return False
 
-        elif self.current_nearby_sequence == self.NearbySequence.turn_right.value:
-            # 用 +90 或 -90
-            if self.fnseqDeadReckoningAngle(self.first_turn_deg):
+        _, _, current_theta = pose
+        kp = 0.3
+        threshold = 0.015
+        target_angle_rad = math.radians(float(target_angle))
+
+        if not self._nearby_angle_inited:
+            self._nearby_angle_inited = True
+            self._nearby_angle_start = current_theta
+            rospy.loginfo(
+                f"[NEARBY {source.upper()} ANGLE] start={current_theta:.4f}rad, "
+                f"target_delta={target_angle_rad:.4f}rad"
+            )
+
+        rotated = current_theta - self._nearby_angle_start
+        remaining = target_angle_rad - rotated
+
+        rospy.loginfo_throttle(
+            0.5,
+            f"[NEARBY {source.upper()} ANGLE] current={current_theta:.4f}, "
+            f"rotated={rotated:.4f}, remaining={remaining:.4f}rad"
+        )
+
+        if abs(remaining) < threshold:
+            self.cmd_vel.fnStopVehicle()
+            self._nearby_angle_inited = False
+            return True
+
+        self.cmd_vel.fnTurn(kp, remaining)
+        return False
+
+    def fnseqDeadReckoningNearby(self, target_distance):
+        """Nearby 專用直線控制，使用已鎖定的 map 或 odom pose。"""
+        pose = self._get_nearby_pose()
+        source = self._nearby_pose_source or "unknown"
+
+        if pose is None:
+            self.cmd_vel.fnStopVehicle()
+            rospy.logwarn_throttle(
+                1.0,
+                f"[NEARBY {source.upper()}] pose unavailable during distance control; "
+                "vehicle stopped. Pose source will not switch mid-motion."
+            )
+            return False
+
+        current_x, current_y, _ = pose
+        kp = 0.2
+        threshold = 0.015
+        target_distance = float(target_distance)
+
+        if not self._nearby_dist_inited:
+            self._nearby_dist_inited = True
+            self._nearby_start_x = current_x
+            self._nearby_start_y = current_y
+            rospy.loginfo(
+                f"[NEARBY {source.upper()} DIST] "
+                f"start=({current_x:.4f}, {current_y:.4f}), "
+                f"target={target_distance:.4f}m"
+            )
+
+        travelled = self.fnCalcDistPoints(
+            self._nearby_start_x,
+            current_x,
+            self._nearby_start_y,
+            current_y,
+        )
+        remaining = (
+            target_distance
+            - math.copysign(1.0, target_distance) * travelled
+        )
+
+        rospy.loginfo_throttle(
+            0.5,
+            f"[NEARBY {source.upper()} DIST] "
+            f"current=({current_x:.4f}, {current_y:.4f}), "
+            f"travelled={travelled:.4f}, remaining={remaining:.4f}m"
+        )
+
+        if abs(remaining) < threshold:
+            self.cmd_vel.fnStopVehicle()
+            self._nearby_dist_inited = False
+            return True
+
+        self.cmd_vel.fnGoStraight(kp, remaining)
+        return False
+
+    def fnSeqMovingNearbyParkingLot(self, desired_dist_threshold):
+        """
+        initial_dist 使用當下 FoundationPose 結果判斷是否需要移車。
+        pose 來源由 ROS 參數 nearby_pose_source 固定指定為 map 或 odom。
+        FoundationPose reset 與 detection disable 只送一次。
+        Nearby 不列入 PBVS 的 vision_required_sequences。
+        Nearby 完成後清除來源鎖定；其他流程仍使用原本 odom。
+        """
+        err = 0.05
+
+        if self.current_nearby_sequence != self.previous_nearby_sequence:
+            rospy.loginfo("current_nearby_sequence {0}".format(self.NearbySequence(self.current_nearby_sequence)))
+            self.previous_nearby_sequence = self.current_nearby_sequence
+
+        if self.current_nearby_sequence == self.NearbySequence.initial_dist.value:
+            # 尚未 reset FoundationPose 前，先用目前視覺結果判斷是否需要移車。
+            if not self.TFConfidence():
+                self.cmd_vel.fnStopVehicle()
+                return False
+
+            self.initial_marker_pose_theta = self.TrustworthyMarker2DTheta(5)
+            self.initial_marker_pose_x = self.Subscriber.marker_2d_pose_x
+            self.initial_marker_pose_y = self.Subscriber.marker_2d_pose_y
+            self.desired_dist_diff = (abs(self.initial_marker_pose_x) - float(desired_dist_threshold))
+
+            rospy.loginfo(f"[NEARBY] desired_dist_diff={self.desired_dist_diff:.4f}m")
+
+            # 已經足夠接近，不需要移車，也不重置 FoundationPose。
+            if abs(self.initial_marker_pose_x) <= abs(float(desired_dist_threshold)):
+                self.cmd_vel.fnStopVehicle()
+                self._reset_nearby_motion_state(clear_source=True)
+                self._nearby_fp_reset_sent = False
+                return True
+
+            # 確定需要移車後，依 nearby_pose_source 使用固定 pose source。
+            source = self._select_nearby_pose_source()
+            pose = self._get_nearby_pose()
+
+            if source is None or pose is None:
+                self.cmd_vel.fnStopVehicle()
+                configured = str(getattr(self.Subscriber, "nearby_pose_source", "map")).strip().lower()
+                rospy.logwarn_throttle(1.0,f"[NEARBY] selected {configured.upper()} pose is unavailable; vehicle stopped and waiting. No automatic fallback.")
+                return False
+
+            pose_x, pose_y, pose_theta = pose
+            self.initial_robot_pose_theta = pose_theta
+            self.initial_robot_pose_x = pose_x
+            self.initial_robot_pose_y = pose_y
+
+            camera_side, camera_y = self.Subscriber.get_camera_side_from_tf()
+
+            if camera_side == "right":
+                self.first_turn_deg = 90
+            elif camera_side == "left":
+                self.first_turn_deg = -90
+            else:
+                rospy.logwarn(f"[PBVS] camera_y={camera_y:.3f}m near center; use right-side turn strategy.")
+                self.first_turn_deg = 90
+
+            self.second_turn_deg = -self.first_turn_deg
+
+            # 確定要進行 Nearby 後，只執行一次 reset / detection disable。
+            if not self._nearby_fp_reset_sent:
+                self.Subscriber.fnDetectionAllowed(pose_detection=False,det_select_mode="nearest_depth",)
+                self.Subscriber.fnHarvestDone()
+                self._nearby_fp_reset_sent = True
+                rospy.logwarn("[NEARBY] FoundationPose reset sent once; detection disabled.")
+
+            self._reset_nearby_motion_state(clear_source=False)
+            self.current_nearby_sequence = self.NearbySequence.turn_right.value
+
+            rospy.loginfo(
+                f"[PBVS] Nearby uses locked {source.upper()} pose: "
+                f"start=({pose_x:.4f}, {pose_y:.4f}, {pose_theta:.4f}), "
+                f"camera_side={camera_side}, camera_y={camera_y:.3f}m, "
+                f"first_turn={self.first_turn_deg}, "
+                f"second_turn={self.second_turn_deg}"
+            )
+            return False
+
+        if self.current_nearby_sequence == self.NearbySequence.turn_right.value:
+            if self.fnseqDeadReckoningAngleNearby(self.first_turn_deg):
                 self.current_nearby_sequence = self.NearbySequence.go_straight.value
             return False
 
-        # 前後調整階段
-        elif self.current_nearby_sequence == self.NearbySequence.go_straight.value:
-            self.Subscriber.fnDetectionAllowed(pose_detection=False, det_select_mode="nearest_depth")
+        if self.current_nearby_sequence == self.NearbySequence.go_straight.value:
             fwd = -(self.desired_dist_diff + err + float(self.Subscriber.spin_forward_comp))
-            if self.fnseqDeadReckoning(fwd):
+            if self.fnseqDeadReckoningNearby(fwd):
                 self.current_nearby_sequence = self.NearbySequence.turn_left.value
             return False
 
-        elif self.current_nearby_sequence == self.NearbySequence.turn_left.value:
-            # 轉回原始朝向：-first_turn_deg
-            if self.fnseqDeadReckoningAngle(self.second_turn_deg):
-                self.current_nearby_sequence = self.NearbySequence.initial_marker.value
+        if self.current_nearby_sequence == self.NearbySequence.turn_left.value:
+            if self.fnseqDeadReckoningAngleNearby(self.second_turn_deg):
+                self.cmd_vel.fnStopVehicle()
+
+                source = self._nearby_pose_source or "unknown"
+
+                self.current_nearby_sequence = self.NearbySequence.initial_dist.value
+                self.previous_nearby_sequence = None
+                self._reset_nearby_motion_state(clear_source=True)
+                self._nearby_fp_reset_sent = False
+                self.check_wait_time = 0
+
+                rospy.loginfo(f"[NEARBY {source.upper()}] completed. Subsequent PBVS stages return to their original odom/vision control.")
                 return True
             return False
 
-        elif self.current_nearby_sequence == self.NearbySequence.initial_marker.value:
-            if self.TFConfidence():
-                if self.check_wait_time > 20:
-                    self.check_wait_time = 0
-                    self.current_nearby_sequence = self.NearbySequence.initial_dist.value
-                    return True
-                else:
-                    self.check_wait_time += 1
-            else:
-                self.check_wait_time = 0
-            return False
-
+        # 非預期狀態：安全停止並重置 Nearby 狀態機。
+        self.cmd_vel.fnStopVehicle()
+        self.current_nearby_sequence = self.NearbySequence.initial_dist.value
+        self.previous_nearby_sequence = None
+        self._reset_nearby_motion_state(clear_source=True)
+        self._nearby_fp_reset_sent = False
         return False
 
     def fnSeqParking(self, tolerance, kp):
