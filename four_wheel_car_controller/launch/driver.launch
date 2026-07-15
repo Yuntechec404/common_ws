@@ -4,7 +4,7 @@
         <param name="rate"  type="int"  value="50" />           <!-- 執行頻率 -->
         <param name="debug" type="bool" value="false" />        <!-- 發佈日誌 -->
         <!-- 里程計模式："Wheel", "-Inertial" -->
-        <param name="mode"  type="str"  value="Wheel-Inertial" />
+        <param name="mode"  type="str"  value="Wheel" />
 
         <param name="wheel_base"    type="double" value="0.5" />    <!-- 車輛軸距 -->
         <param name="max_speed"     type="double" value="1.1" />    <!-- 最高速度 -->
